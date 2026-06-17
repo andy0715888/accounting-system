@@ -1,0 +1,112 @@
+const express = require('express');
+const { query, queryOne, execute } = require('../db');
+const fs = require('fs');
+const path = require('path');
+
+const router = express.Router();
+
+function requireAuth(req, res, next) {
+    if (!req.session.userId) return res.status(401).json({ error: '请先登录' });
+    next();
+}
+
+router.get('/', requireAuth, async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const settings = await query('SELECT key, value FROM settings WHERE user_id = ?', [userId]);
+        const result = {};
+        settings.forEach(s => {
+            try { result[s.key] = JSON.parse(s.value); } catch { result[s.key] = s.value; }
+        });
+        res.json(result);
+    } catch (err) {
+        console.error('获取设置错误:', err);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+router.get('/:key', requireAuth, async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const { key } = req.params;
+        const setting = await queryOne('SELECT value FROM settings WHERE user_id = ? AND key = ?', [userId, key]);
+        if (!setting) return res.json({ value: null });
+        try { res.json({ value: JSON.parse(setting.value) }); } catch { res.json({ value: setting.value }); }
+    } catch (err) {
+        console.error('获取设置错误:', err);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+router.post('/', requireAuth, async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const { key, value } = req.body;
+        if (!key) return res.status(400).json({ error: '设置键不能为空' });
+
+        const jsonValue = typeof value === 'string' ? value : JSON.stringify(value);
+        await execute(`
+            INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?)
+            ON CONFLICT(user_id, key) DO UPDATE SET value = ?
+        `, [userId, key, jsonValue, jsonValue]);
+
+        res.json({ success: true, message: '设置已保存' });
+    } catch (err) {
+        console.error('保存设置错误:', err);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+router.delete('/:key', requireAuth, async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const { key } = req.params;
+        await execute('DELETE FROM settings WHERE user_id = ? AND key = ?', [userId, key]);
+        res.json({ success: true, message: '设置已删除' });
+    } catch (err) {
+        console.error('删除设置错误:', err);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+router.delete('/background', requireAuth, async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const setting = await queryOne('SELECT value FROM settings WHERE user_id = ? AND key = ?', [userId, 'background']);
+        if (setting) {
+            try {
+                const bg = JSON.parse(setting.value);
+                if (bg.type === 'local' && bg.path) {
+                    const filePath = path.join(__dirname, '../../', bg.path);
+                    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                }
+            } catch {}
+        }
+        await execute('DELETE FROM settings WHERE user_id = ? AND key = ?', [userId, 'background']);
+        res.json({ success: true, message: '背景已移除' });
+    } catch (err) {
+        console.error('删除背景错误:', err);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+router.post('/cert', requireAuth, async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const { certPath, keyPath } = req.body;
+        if (!certPath || !keyPath) return res.status(400).json({ error: '请提供证书和密钥路径' });
+        if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+            return res.status(400).json({ error: '证书或密钥文件不存在' });
+        }
+
+        await execute(`INSERT INTO settings (user_id, key, value) VALUES (?, 'cert_path', ?) ON CONFLICT(user_id, key) DO UPDATE SET value = ?`, [userId, certPath, certPath]);
+        await execute(`INSERT INTO settings (user_id, key, value) VALUES (?, 'key_path', ?) ON CONFLICT(user_id, key) DO UPDATE SET value = ?`, [userId, keyPath, keyPath]);
+
+        res.json({ success: true, message: '证书路径已保存，重启服务生效' });
+    } catch (err) {
+        console.error('保存证书路径错误:', err);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+module.exports = router;
