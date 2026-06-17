@@ -1,11 +1,29 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const { query, queryOne, execute } = require('../db');
+const { getDB } = require('../db'); // 引入 db 用于 prepare
 
 const router = express.Router();
 
+// 检查是否允许注册
+async function isRegisterAllowed() {
+    const setting = await queryOne("SELECT value FROM settings WHERE key = 'allow_register'");
+    if (!setting) return true; // 默认允许
+    try {
+        return JSON.parse(setting.value) !== false;
+    } catch {
+        return true;
+    }
+}
+
 router.post('/register', async (req, res) => {
     try {
+        // 检查注册开关
+        const allowed = await isRegisterAllowed();
+        if (!allowed) {
+            return res.status(403).json({ error: '管理员已关闭注册功能' });
+        }
+
         const { username, password } = req.body;
         if (!username || !password) return res.status(400).json({ error: '用户名和密码不能为空' });
         if (password.length < 6) return res.status(400).json({ error: '密码长度至少6位' });
@@ -15,12 +33,13 @@ router.post('/register', async (req, res) => {
 
         const hashedPassword = bcrypt.hashSync(password, 10);
         const result = await execute('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword]);
+        const userId = result.lastID;
 
         // 为新用户创建默认标签和列
-        const userId = result.lastID;
         await execute('INSERT INTO tabs (user_id, name) VALUES (?, ?)', [userId, '默认']);
         const tab = await queryOne('SELECT id FROM tabs WHERE user_id = ?', [userId]);
         if (tab) {
+            const db = getDB();
             const defaultColumns = [
                 { col_key: 'date', col_name: '日期', col_type: 'date', col_order: 0 },
                 { col_key: 'category', col_name: '类别', col_type: 'text', col_order: 1 },
@@ -45,6 +64,7 @@ router.post('/register', async (req, res) => {
     }
 });
 
+// 其他路由（login, check, logout, change-password）保持不变
 router.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
