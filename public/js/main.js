@@ -7,7 +7,8 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedRows: new Set(),
         filters: {},
         isLoaded: false,
-        userName: ''
+        userName: '',
+        isAdmin: false
     };
 
     const $ = (sel) => document.querySelector(sel);
@@ -44,6 +45,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const newPwdInput = $('#newPassword');
     const confirmPwdInput = $('#confirmPassword');
     const changePwdStatus = $('#changePwdStatus');
+    const allowRegisterCheckbox = $('#allowRegisterCheckbox');
+    const saveRegisterSwitchBtn = $('#saveRegisterSwitchBtn');
+    const registerSwitchStatus = $('#registerSwitchStatus');
+    const registerSwitchGroup = $('#registerSwitchGroup');
 
     // 菜单切换
     $$('.menu-item').forEach(item => {
@@ -623,7 +628,7 @@ document.addEventListener('DOMContentLoaded', function() {
             item.addEventListener('dragleave', function() {
                 this.classList.remove('drag-over');
             });
-            item.addEventListener('drop', function(e) {
+            item.addEventListener('drop', async function(e) {
                 e.preventDefault();
                 this.classList.remove('drag-over');
                 const draggedId = parseInt(e.dataTransfer.getData('text/plain'));
@@ -633,20 +638,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 const draggedIndex = cols.findIndex(c => c.id === draggedId);
                 const targetIndex = cols.findIndex(c => c.id === targetId);
                 if (draggedIndex === -1 || targetIndex === -1) return;
+                // 交换顺序
                 const temp = cols[draggedIndex].col_order;
                 cols[draggedIndex].col_order = cols[targetIndex].col_order;
                 cols[targetIndex].col_order = temp;
                 cols.sort((a, b) => a.col_order - b.col_order);
                 const orderMap = {};
                 cols.forEach((c, i) => { orderMap[c.id] = i; });
-                API.post('/columns/reorder', { orderMap })
-                    .then(() => {
-                        state.columns = cols;
-                        renderColumnList();
-                        renderTable();
-                        setStatus('✅ 顺序已更新');
-                    })
-                    .catch(err => setStatus('❌ 更新失败: ' + err.message));
+                try {
+                    await API.post('/columns/reorder', { orderMap });
+                    state.columns = cols;
+                    renderColumnList();
+                    renderTable();
+                    setStatus('✅ 顺序已更新');
+                } catch (err) {
+                    setStatus('❌ 更新失败: ' + err.message);
+                    // 回退重新加载
+                    await loadColumns(state.currentTabId);
+                    renderColumnList();
+                }
             });
         });
 
@@ -690,7 +700,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     };
 
-    // 添加列（修复版）
+    // 添加列
     async function addColumn() {
         const name = newColName.value.trim();
         const type = newColType.value;
@@ -717,6 +727,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             if (result.success) {
                 newColName.value = '';
+                // 重新加载列，保持后端顺序
                 await loadColumns(state.currentTabId);
                 renderColumnList();
                 renderTable();
@@ -810,6 +821,71 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
     }
 
+    // 注册开关管理
+    async function loadRegisterSwitch() {
+        try {
+            const data = await API.get('/settings/allow_register');
+            if (data.value !== undefined) {
+                allowRegisterCheckbox.checked = data.value !== false;
+            }
+        } catch (err) {}
+    }
+
+    async function saveRegisterSwitch() {
+        const value = allowRegisterCheckbox.checked;
+        try {
+            await API.post('/settings', { key: 'allow_register', value });
+            registerSwitchStatus.textContent = '✅ 已保存';
+            setTimeout(() => { registerSwitchStatus.textContent = ''; }, 3000);
+        } catch (err) {
+            registerSwitchStatus.textContent = '❌ 保存失败: ' + err.message;
+        }
+    }
+
+    // 上传 favicon
+    async function uploadFavicon() {
+        const fileInput = document.getElementById('faviconFileInput');
+        const file = fileInput.files[0];
+        if (!file) {
+            document.getElementById('faviconStatus').textContent = '⚠️ 请选择文件';
+            return;
+        }
+        const formData = new FormData();
+        formData.append('image', file);
+        try {
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                credentials: 'include',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.success) {
+                // 将上传的图片复制到 public/favicon.ico
+                const response = await fetch('/api/settings/favicon', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ path: data.url })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('faviconStatus').textContent = '✅ 图标已更新，请刷新浏览器查看';
+                    // 强制刷新 favicon
+                    const link = document.querySelector("link[rel*='icon']");
+                    if (link) {
+                        link.href = data.url + '?v=' + Date.now();
+                    }
+                } else {
+                    document.getElementById('faviconStatus').textContent = '❌ 保存图标失败: ' + (result.error || '');
+                }
+            } else {
+                document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + (data.error || '');
+            }
+        } catch (err) {
+            document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + err.message;
+        }
+    }
+
     // 加载设置
     async function loadSettings() {
         try {
@@ -827,6 +903,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     preview.classList.add('has-bg');
                     preview.textContent = '';
                 }
+            }
+            // 加载注册开关
+            await loadRegisterSwitch();
+            // 判断是否为管理员 (这里简单判断 userId === 1)
+            const auth = await API.get('/auth/check');
+            if (auth.loggedIn && auth.user.id === 1) {
+                registerSwitchGroup.style.display = 'block';
             }
         } catch (err) { console.warn('加载设置失败:', err); }
     }
@@ -847,11 +930,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     closeColumnModal.addEventListener('click', () => columnModal.classList.remove('show'));
 
-    // 绑定添加列按钮
     if (addColBtn) {
         addColBtn.addEventListener('click', addColumn);
-    } else {
-        console.error('addColBtn not found');
     }
 
     closeImport.addEventListener('click', () => importModal.classList.remove('show'));
@@ -906,7 +986,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 preview.style.backgroundImage = `url(${data.url})`;
                 preview.classList.add('has-bg');
                 preview.textContent = '';
-                setStatus('✅ 上传成功');
+                setStatus('✅ 背景已应用');
             } else { setStatus('❌ 上传失败: ' + (data.error || '')); }
         } catch (err) { setStatus('❌ 上传失败: ' + err.message); }
     });
@@ -922,6 +1002,15 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 移除失败: ' + err.message); }
     });
 
+    // favicon 上传
+    document.getElementById('uploadFaviconBtn').addEventListener('click', uploadFavicon);
+    document.getElementById('faviconFileInput').addEventListener('change', function() {
+        document.getElementById('faviconStatus').textContent = '';
+    });
+
+    // 注册开关保存
+    saveRegisterSwitchBtn.addEventListener('click', saveRegisterSwitch);
+
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === 'n') { e.preventDefault(); addRow(); }
         if (e.key === 'Delete' && !e.target.closest('input') && !e.target.closest('select')) deleteSelected();
@@ -934,6 +1023,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!auth.loggedIn) { window.location.href = '/login'; return; }
             usernameDisplay.textContent = auth.user.username;
             state.userName = auth.user.username;
+            state.isAdmin = (auth.user.id === 1);
             await loadTabs();
             if (state.tabs.length === 0) await createDefaultTab();
             else {
