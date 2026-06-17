@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>记账系统</title>
+    <!-- 添加 favicon 占位，用户可上传替换 -->
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/css/main.css">
 </head>
 <body>
@@ -80,6 +82,17 @@
             <div id="view-settings" class="view-panel">
                 <h2>⚙️ 系统设置</h2>
                 <div class="settings-container">
+                    <!-- 注册开关（仅管理员可见） -->
+                    <div class="setting-group" id="registerSwitchGroup" style="display:none;">
+                        <h3>🔓 注册管理</h3>
+                        <p class="setting-desc">关闭后，新用户无法注册</p>
+                        <label>
+                            <input type="checkbox" id="allowRegisterCheckbox"> 允许新用户注册
+                        </label>
+                        <button class="tool-btn primary" id="saveRegisterSwitchBtn">保存注册开关</button>
+                        <span id="registerSwitchStatus"></span>
+                    </div>
+
                     <!-- 修改密码 -->
                     <div class="setting-group">
                         <h3>🔐 修改密码</h3>
@@ -134,6 +147,17 @@
                                 <button class="tool-btn primary" id="uploadBgBtn">上传图片</button>
                             </div>
                             <button class="tool-btn danger" id="removeBgBtn">移除背景</button>
+                        </div>
+                    </div>
+
+                    <!-- 网站图标 (favicon) -->
+                    <div class="setting-group">
+                        <h3>🖼️ 网站图标 (Favicon)</h3>
+                        <p class="setting-desc">上传 .ico 或 .png 图片，刷新浏览器后生效</p>
+                        <div class="favicon-setting">
+                            <input type="file" id="faviconFileInput" accept=".ico,.png,.jpg,.jpeg,.gif,.svg" />
+                            <button class="tool-btn primary" id="uploadFaviconBtn">上传图标</button>
+                            <span id="faviconStatus"></span>
                         </div>
                     </div>
                 </div>
