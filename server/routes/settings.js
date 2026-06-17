@@ -140,5 +140,20 @@ router.post('/cert', requireAuth, async (req, res) => {
         res.status(500).json({ error: '服务器错误' });
     }
 });
+// 添加在 settings.js 的末尾
+router.post('/favicon', requireAuth, async (req, res) => {
+    try {
+        const { path: filePath } = req.body;
+        if (!filePath) return res.status(400).json({ error: '缺少文件路径' });
+        const src = path.join(__dirname, '../../', filePath);
+        const dest = path.join(__dirname, '../../public/favicon.ico');
+        if (!fs.existsSync(src)) return res.status(404).json({ error: '源文件不存在' });
+        fs.copyFileSync(src, dest);
+        res.json({ success: true, message: '图标更新成功' });
+    } catch (err) {
+        console.error('更新图标错误:', err);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
 
 module.exports = router;
