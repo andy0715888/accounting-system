@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>记账系统</title>
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <header class="navbar">
+        <div class="nav-left">
+            <span class="nav-logo">📊 记账系统</span>
+        </div>
+        <div class="nav-center">
+            <span class="nav-user">👤 <span id="usernameDisplay">用户</span></span>
+        </div>
+        <div class="nav-right">
+            <button class="nav-btn" id="logoutBtn">🚪 退出</button>
+        </div>
+    </header>
+
+    <!-- 主体 -->
+    <div class="main-body">
+        <!-- 左侧菜单 -->
+        <aside class="sidebar">
+            <ul class="menu">
+                <li class="menu-item active" data-view="table"><span>📋</span> 记账表格</li>
+                <li class="menu-item" data-view="stats"><span>📈</span> 财务统计</li>
+                <li class="menu-item" data-view="settings"><span>⚙️</span> 系统设置</li>
+            </ul>
+        </aside>
+
+        <!-- 右侧内容 -->
+        <div class="content-area">
+            <!-- 表格视图 -->
+            <div id="view-table" class="view-panel active">
+                <!-- 标签栏 -->
+                <div class="tab-bar-container">
+                    <div class="tab-bar" id="tabBar"></div>
+                    <button class="add-tab-btn" id="addTabBtn">➕</button>
+                </div>
+
+                <!-- 工具栏 -->
+                <div class="tab-toolbar">
+                    <div class="toolbar-left">
+                        <button class="tool-btn primary" id="addRowBtn">➕ 添加行</button>
+                        <button class="tool-btn danger" id="deleteRowsBtn">🗑️ 删除选中</button>
+                        <span class="tool-divider"></span>
+                        <button class="tool-btn" id="importBtn">📥 导入</button>
+                        <button class="tool-btn" id="exportBtn">📤 导出</button>
+                        <span class="tool-divider"></span>
+                        <button class="tool-btn" id="refreshBtn">🔄 刷新</button>
+                        <span class="tool-divider"></span>
+                        <button class="tool-btn" id="manageColumnsBtn">📋 列管理</button>
+                    </div>
+                    <div class="toolbar-right">
+                        <span class="record-count" id="recordCount">共 0 条记录</span>
+                    </div>
+                </div>
+
+                <!-- 表格 -->
+                <div class="table-container">
+                    <div class="table-wrapper" id="tableWrapper">
+                        <table id="dataTable">
+                            <thead id="tableHead"></thead>
+                            <tbody id="tableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 统计视图 -->
+            <div id="view-stats" class="view-panel">
+                <h2>📈 财务统计</h2>
+                <div class="stats-container" id="statsContainer"></div>
+            </div>
+
+            <!-- 设置视图 -->
+            <div id="view-settings" class="view-panel">
+                <h2>⚙️ 系统设置</h2>
+                <div class="settings-container">
+                    <!-- 修改密码 -->
+                    <div class="setting-group">
+                        <h3>🔐 修改密码</h3>
+                        <div class="password-form">
+                            <div class="input-group">
+                                <label>当前密码</label>
+                                <input type="password" id="oldPassword" placeholder="请输入当前密码" />
+                            </div>
+                            <div class="input-group">
+                                <label>新密码</label>
+                                <input type="password" id="newPassword" placeholder="至少6位" />
+                            </div>
+                            <div class="input-group">
+                                <label>确认密码</label>
+                                <input type="password" id="confirmPassword" placeholder="再次输入" />
+                            </div>
+                            <button class="tool-btn primary" id="changePasswordBtn">修改密码</button>
+                            <span id="changePwdStatus"></span>
+                        </div>
+                    </div>
+
+                    <!-- HTTPS 证书 -->
+                    <div class="setting-group">
+                        <h3>🔐 HTTPS 证书</h3>
+                        <p class="setting-desc">设置证书路径后，重启服务将启用 HTTPS</p>
+                        <div class="cert-setting">
+                            <div class="input-group">
+                                <label>证书文件 (cert.pem)</label>
+                                <input type="text" id="certPathInput" placeholder="/etc/ssl/cert.pem" />
+                            </div>
+                            <div class="input-group">
+                                <label>私钥文件 (key.pem)</label>
+                                <input type="text" id="keyPathInput" placeholder="/etc/ssl/key.pem" />
+                            </div>
+                            <button class="tool-btn primary" id="saveCertBtn">保存证书设置</button>
+                            <span id="certStatus"></span>
+                        </div>
+                    </div>
+
+                    <!-- 背景设置 -->
+                    <div class="setting-group">
+                        <h3>🖼️ 登录背景</h3>
+                        <p class="setting-desc">支持 HTTPS 图片链接或上传本地图片</p>
+                        <div class="bg-setting">
+                            <div class="bg-preview" id="bgPreview"><span>暂无背景</span></div>
+                            <div class="bg-input-group">
+                                <input type="text" id="bgUrlInput" placeholder="输入图片URL" />
+                                <button class="tool-btn" id="setBgUrl">应用URL</button>
+                            </div>
+                            <div class="bg-upload-group">
+                                <input type="file" id="bgFileInput" accept="image/*" />
+                                <button class="tool-btn primary" id="uploadBgBtn">上传图片</button>
+                            </div>
+                            <button class="tool-btn danger" id="removeBgBtn">移除背景</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 列管理弹窗 -->
+    <div class="modal-overlay" id="columnModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>📋 列管理 - <span id="columnModalTabName"></span></h2>
+                <button class="modal-close" id="closeColumnModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="column-add-form">
+                    <input type="text" id="newColName" placeholder="列名称（如：金额）" />
+                    <select id="newColType">
+                        <option value="text">文本</option>
+                        <option value="number">数字</option>
+                        <option value="date">日期</option>
+                        <option value="select">下拉选择</option>
+                        <option value="boolean">布尔</option>
+                        <option value="days_remaining">剩余天数</option>
+                    </select>
+                    <button class="tool-btn primary" id="addColBtn">添加列</button>
+                </div>
+                <div class="column-list" id="columnList">
+                    <!-- 动态生成 -->
+                </div>
+                <p style="font-size:12px;color:#999;margin-top:8px;">💡 拖拽列可调整顺序。点击列名旁的「收入」/「支出」按钮标记该列用于财务统计。</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导入弹窗 -->
+    <div class="modal-overlay" id="importModal">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h2>📥 导入数据</h2>
+                <button class="modal-close" id="closeImport">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="import-desc">支持 Excel (.xlsx, .xls) 和 CSV</p>
+                <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" />
+                <div class="import-actions">
+                    <button class="tool-btn primary" id="confirmImport">导入</button>
+                    <button class="tool-btn" id="cancelImport">取消</button>
+                </div>
+                <div id="importStatus"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar"><span id="statusText">就绪</span></div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/main.js"></script>
+</body>
+</html>
