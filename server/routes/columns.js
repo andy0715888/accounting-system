@@ -1,5 +1,5 @@
 const express = require('express');
-const { query, queryOne, execute } = require('../db');
+const { query, queryOne, execute, getDB } = require('../db');
 
 const router = express.Router();
 
@@ -36,7 +36,6 @@ router.post('/', requireAuth, async (req, res) => {
         if (!tab_id) return res.status(400).json({ error: '缺少 tab_id' });
         if (!col_name) return res.status(400).json({ error: '列名称不能为空' });
 
-        // 自动生成列键
         if (!col_key) {
             const ts = Date.now();
             const rand = Math.random().toString(36).substring(2, 6);
@@ -45,7 +44,6 @@ router.post('/', requireAuth, async (req, res) => {
             return res.status(400).json({ error: '列键格式错误' });
         }
 
-        // 检查重复
         const existing = await queryOne(
             'SELECT id FROM column_defs WHERE user_id = ? AND tab_id = ? AND col_key = ?',
             [userId, tab_id, col_key]
@@ -124,6 +122,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
     }
 });
 
+// 修复：增加 db 引用，确保 reorder 能正常执行
 router.post('/reorder', requireAuth, async (req, res) => {
     try {
         const userId = req.session.userId;
@@ -132,6 +131,7 @@ router.post('/reorder', requireAuth, async (req, res) => {
             return res.status(400).json({ error: '请提供列顺序映射' });
         }
 
+        const db = getDB(); // 获取数据库实例
         const stmt = db.prepare('UPDATE column_defs SET col_order = ? WHERE id = ? AND user_id = ?');
         for (const [id, order] of Object.entries(orderMap)) {
             stmt.run([order, id, userId]);
