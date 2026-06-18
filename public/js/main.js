@@ -1,12 +1,15 @@
+console.log('main.js loaded'); // 用于验证脚本是否加载
+
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM ready');
     let state = {
         tabs: [],
         currentTabId: null,
         columns: [],
         records: [],
         selectedRows: new Set(),
-        filters: {}, // { colKey: string }
-        filterOptions: {}, // { colKey: [unique values] }
+        filters: {},
+        filterOptions: {},
         isLoaded: false,
         userName: '',
         isAdmin: false
@@ -53,30 +56,33 @@ document.addEventListener('DOMContentLoaded', function() {
     const registerSwitchStatus = $('#registerSwitchStatus');
     const registerSwitchGroup = $('#registerSwitchGroup');
 
-    // --- 菜单切换（修复） ---
-    $$('.menu-item').forEach(item => {
-        item.addEventListener('click', function() {
-            $$('.menu-item').forEach(i => i.classList.remove('active'));
-            this.classList.add('active');
-            const view = this.dataset.view;
-            $$('.view-panel').forEach(p => p.classList.remove('active'));
-            const target = document.getElementById('view-' + view);
-            if (target) target.classList.add('active');
-            if (view === 'stats') renderStats();
+    // --- 菜单切换 ---
+    function initMenu() {
+        $$('.menu-item').forEach(item => {
+            item.addEventListener('click', function() {
+                $$('.menu-item').forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                const view = this.dataset.view;
+                $$('.view-panel').forEach(p => p.classList.remove('active'));
+                const target = document.getElementById('view-' + view);
+                if (target) target.classList.add('active');
+                if (view === 'stats') renderStats();
+            });
         });
-    });
+    }
+    initMenu();
 
-    // --- 时间显示 ---
+    // --- 时间 ---
     function updateClock() {
         const now = new Date();
-        const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
-        const str = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} 星期${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        currentTimeDisplay.textContent = str;
+        const weekdays = ['日','一','二','三','四','五','六'];
+        currentTimeDisplay.textContent =
+            `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} 星期${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     }
     setInterval(updateClock, 10000);
     updateClock();
 
-    // --- 工具函数 ---
+    // --- 工具 ---
     function setStatus(msg) { statusText.textContent = msg; }
     function formatDate(d) {
         if (!d) return '';
@@ -93,7 +99,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     function getCellValue(record, colKey) { return record.data[colKey] ?? ''; }
 
-    // 计算剩余天数
     function computeDaysRemaining(dateStr) {
         if (!dateStr) return '';
         const target = new Date(dateStr);
@@ -105,7 +110,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return diff;
     }
 
-    // 判断是否过期（基于主机到期时间）
     function checkExpired(expireDateStr) {
         if (!expireDateStr) return '未知';
         const days = computeDaysRemaining(expireDateStr);
@@ -113,14 +117,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return days >= 0 ? '有效' : '过期';
     }
 
-    // 获取下个月同一天
     function getNextMonth(date) {
         const d = new Date(date);
         d.setMonth(d.getMonth() + 1);
         return d;
     }
 
-    // 获取某列的所有唯一值（用于筛选下拉）
     function getUniqueValues(colKey) {
         const values = new Set();
         state.records.forEach(r => {
@@ -130,7 +132,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return Array.from(values).sort();
     }
 
-    // --- API 封装 ---
+    // --- API ---
     const API = {
         get: (url) => fetch('/api' + url, { credentials: 'include' }).then(r => r.json()),
         post: (url, data) => fetch('/api' + url, {
@@ -151,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }).then(r => r.json())
     };
 
-    // --- 加载数据 ---
+    // --- 数据加载 ---
     async function loadTabs() {
         const tabs = await API.get('/tabs');
         state.tabs = tabs;
@@ -165,11 +167,18 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadRecords(tabId) {
         const records = await API.get('/records?tabId=' + tabId);
         state.records = records;
-        // 更新筛选选项缓存
         state.columns.forEach(col => {
             state.filterOptions[col.col_key] = getUniqueValues(col.col_key);
         });
         return records;
+    }
+
+    async function loadDataForTab(tabId) {
+        try {
+            await loadColumns(tabId);
+            await loadRecords(tabId);
+            setStatus(`✅ 已加载 ${state.records.length} 条记录`);
+        } catch (err) { setStatus('❌ 加载失败: ' + err.message); }
     }
 
     // --- 标签渲染 ---
@@ -184,7 +193,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         tabBar.innerHTML = html;
 
-        // 双击标签名重命名
         tabBar.querySelectorAll('.tab-name').forEach(el => {
             el.addEventListener('dblclick', async function(e) {
                 e.stopPropagation();
@@ -205,7 +213,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 切换标签
         tabBar.querySelectorAll('.tab-item').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 if (e.target.classList.contains('tab-close') || e.target.classList.contains('tab-name')) return;
@@ -230,14 +237,6 @@ document.addEventListener('DOMContentLoaded', function() {
         renderTable();
         const tab = state.tabs.find(t => t.id === tabId);
         if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
-    }
-
-    async function loadDataForTab(tabId) {
-        try {
-            await loadColumns(tabId);
-            await loadRecords(tabId);
-            setStatus(`✅ 已加载 ${state.records.length} 条记录`);
-        } catch (err) { setStatus('❌ 加载失败: ' + err.message); }
     }
 
     // --- 标签管理 ---
@@ -275,7 +274,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (name && name.trim()) createTab(name.trim());
     });
 
-    // --- 渲染表格（自适应列宽、筛选下拉、日期快捷内嵌） ---
+    // --- 渲染表格 ---
     function renderTable() {
         if (!state.currentTabId) return;
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
@@ -332,7 +331,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 let val = getCellValue(record, colKey);
                 let inputHtml = '';
 
-                // 特殊列类型处理
                 if (col.col_type === 'days_remaining') {
                     let dateKey = '';
                     if (colKey === 'host_remaining') dateKey = 'host_expire';
@@ -364,7 +362,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                 } else if (col.col_type === 'date') {
                     const dateVal = val || '';
-                    // 日期快捷按钮放在输入框下方（内联）
                     inputHtml = `
                         <div class="date-control">
                             <input type="date" class="cell-input date-input" data-col="${colKey}" data-id="${record.id}" value="${dateVal}" />
@@ -381,19 +378,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (col.col_type === 'select') {
                     const options = (col.col_options || []).map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('');
                     inputHtml = `<select class="cell-input select-cell" data-col="${colKey}" data-id="${record.id}"><option value="">-</option>${options}</select>`;
-                } else if (col.col_type === 'text' && colKey === 'is_expired') {
-                    // 是否过期：根据 host_expire 计算
+                } else if (colKey === 'is_expired') {
                     const expireDate = record.data.host_expire;
                     const status = checkExpired(expireDate);
                     const color = status === '有效' ? '#67c23a' : (status === '过期' ? '#f56c6c' : '#999');
                     inputHtml = `<span style="color:${color};">${status}</span>`;
                 } else {
-                    // 普通文本/数字
                     const inputType = col.col_type === 'number' ? 'number' : 'text';
                     const step = col.col_type === 'number' ? 'step="0.01"' : '';
                     inputHtml = `<input type="${inputType}" class="cell-input" data-col="${colKey}" data-id="${record.id}" value="${val || ''}" ${step} />`;
                 }
-
                 tbodyHtml += `<td>${inputHtml}</td>`;
             });
             tbodyHtml += '</tr>';
@@ -404,46 +398,42 @@ document.addEventListener('DOMContentLoaded', function() {
         bindTableEvents();
         bindFilterEvents();
         bindSpecialEvents();
-
-        // 自动调整列宽（基于内容）
         autoFitColumns();
     }
 
-    // 自动调整列宽（使用内容宽度）
+    // 自动调整列宽
     function autoFitColumns() {
-        // 获取所有 th 和 td，计算最大宽度
         const table = document.getElementById('dataTable');
+        if (!table) return;
         const rows = table.querySelectorAll('tr');
-        const colCount = rows[0] ? rows[0].cells.length : 0;
+        if (rows.length === 0) return;
+        const colCount = rows[0].cells.length;
         if (colCount === 0) return;
 
-        // 重置所有 th 宽度
-        const ths = table.querySelectorAll('th');
-        ths.forEach(th => th.style.width = '');
-
-        // 计算每列最大文本宽度（近似）
         const colWidths = new Array(colCount).fill(0);
         rows.forEach(row => {
             for (let i = 0; i < row.cells.length; i++) {
                 const cell = row.cells[i];
-                // 获取文本内容（去除内部元素）
                 const text = cell.textContent || cell.innerText || '';
-                // 估算宽度（每个字符约 14px，加上 padding）
-                const estimatedWidth = text.length * 14 + 20;
-                if (estimatedWidth > colWidths[i]) colWidths[i] = estimatedWidth;
+                // 估算宽度（中文字符约14px，字母约8px）
+                let width = 0;
+                for (let ch of text) {
+                    width += (ch.charCodeAt(0) > 127) ? 14 : 8;
+                }
+                width += 20; // padding
+                if (width > colWidths[i]) colWidths[i] = width;
             }
         });
 
-        // 设置最小和最大宽度
+        const ths = table.querySelectorAll('th');
         ths.forEach((th, index) => {
-            let width = colWidths[index] || 100;
-            width = Math.max(80, Math.min(width, 300));
+            let width = Math.max(80, Math.min(colWidths[index] + 20, 350));
             th.style.width = width + 'px';
             th.style.minWidth = width + 'px';
         });
     }
 
-    // --- 筛选逻辑（支持文本输入和下拉选择） ---
+    // 筛选
     function getFilteredRecords() {
         let records = state.records;
         for (const [colKey, filterText] of Object.entries(state.filters)) {
@@ -456,9 +446,8 @@ document.addEventListener('DOMContentLoaded', function() {
         return records;
     }
 
-    // --- 绑定筛选事件（包括下拉选项） ---
+    // 绑定筛选事件
     function bindFilterEvents() {
-        // 点击下拉按钮
         $$('.col-dropdown-btn').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
@@ -467,18 +456,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!panel) return;
                 $$('.col-dropdown-panel.show').forEach(p => { if (p !== panel) p.classList.remove('show'); });
                 panel.classList.toggle('show');
-                // 聚焦输入框
                 const input = panel.querySelector('.filter-input');
                 if (input) setTimeout(() => input.focus(), 100);
             };
         });
 
-        // 文本输入筛选
         $$('.filter-input').forEach(input => {
             input.oninput = function() {
                 const col = this.dataset.col;
                 const val = this.value.trim();
-                // 同步更新复选框状态
                 const checkboxes = document.querySelectorAll(`.filter-option[data-col="${col}"]`);
                 checkboxes.forEach(cb => cb.checked = false);
                 if (val) state.filters[col] = val;
@@ -494,17 +480,14 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 下拉选项筛选（复选框）
         $$('.filter-option').forEach(cb => {
             cb.onchange = function() {
                 const col = this.dataset.col;
                 const val = this.value;
-                // 取消其他选项
                 const siblings = document.querySelectorAll(`.filter-option[data-col="${col}"]`);
                 siblings.forEach(s => { if (s !== this) s.checked = false; });
                 if (this.checked) {
                     state.filters[col] = val;
-                    // 同步输入框
                     const input = document.querySelector(`.filter-input[data-col="${col}"]`);
                     if (input) input.value = val;
                 } else {
@@ -516,7 +499,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 清除按钮
         $$('.filter-clear').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
@@ -532,7 +514,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 点击外部关闭下拉
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.col-dropdown-btn') && !e.target.closest('.col-dropdown-panel')) {
                 $$('.col-dropdown-panel.show').forEach(p => p.classList.remove('show'));
@@ -540,9 +521,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 绑定表格事件（复选框、单元格编辑、列宽拖拽） ---
+    // 绑定通用表格事件
     function bindTableEvents() {
-        // 全选
         const selectAll = $('#selectAll');
         if (selectAll) {
             selectAll.onchange = function() {
@@ -566,12 +546,11 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 单元格编辑（普通 input/select）
+        // 普通输入框变化
         $$('.cell-input:not(.address-select):not(.months-input):not(.date-input)').forEach(input => {
             input.onblur = () => handleCellChange(input);
             input.onkeydown = (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-                if (e.key === 'Tab') { /* allow default */ }
             };
             if (input.tagName === 'SELECT') input.onchange = () => handleCellChange(input);
         });
@@ -606,9 +585,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 特殊列事件（日期快捷、月数增减、地址打开、IP同步） ---
+    // 特殊控件事件
     function bindSpecialEvents() {
-        // 日期快捷按钮（清除、今天、单月、季度、半年、一年）
+        // 日期快捷
         $$('.date-quick').forEach(btn => {
             btn.onclick = function() {
                 const col = this.dataset.col;
@@ -618,25 +597,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!input) return;
                 let dateStr = '';
                 if (offset === '0') {
-                    // 清除
                     dateStr = '';
                 } else if (offset === 'today') {
-                    const now = new Date();
-                    dateStr = now.toISOString().split('T')[0];
+                    dateStr = new Date().toISOString().split('T')[0];
                 } else {
                     const months = parseInt(offset);
                     if (!isNaN(months)) {
-                        const now = new Date();
-                        now.setMonth(now.getMonth() + months);
-                        dateStr = now.toISOString().split('T')[0];
+                        const d = new Date();
+                        d.setMonth(d.getMonth() + months);
+                        dateStr = d.toISOString().split('T')[0];
                     }
                 }
                 input.value = dateStr;
                 handleCellChange(input);
-                // 触发日期关联更新（如 host_expire）
-                if (col === 'host_purchase' || col === 'client_purchase') {
-                    // 在 handleCellChange 中会触发重新计算
-                }
             };
         });
 
@@ -666,14 +639,11 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 地址打开按钮
+        // 地址打开
         $$('.open-link').forEach(btn => {
             btn.onclick = function() {
                 const address = this.dataset.address;
-                if (!address) {
-                    setStatus('⚠️ 请先选择地址类型');
-                    return;
-                }
+                if (!address) { setStatus('⚠️ 请先选择地址类型'); return; }
                 const tr = this.closest('tr');
                 const rowId = parseInt(tr.dataset.id);
                 const record = state.records.find(r => r.id === rowId);
@@ -688,86 +658,70 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (!domain) { setStatus('⚠️ 域名为空'); return; }
                     url = 'http://' + domain;
                 }
-                if (url) {
-                    window.open(url, '_blank');
-                }
+                if (url) window.open(url, '_blank');
             };
         });
 
-        // 地址下拉变化：更新打开按钮的 data-address，并同步 IP信息
+        // 地址下拉变更，同步IP信息
         $$('.address-select').forEach(sel => {
             sel.onchange = function() {
                 const tr = this.closest('tr');
                 const openBtn = tr.querySelector('.open-link');
-                if (openBtn) {
-                    openBtn.dataset.address = this.value;
-                }
-                // 同步 IP信息（如果该列是 address 列，则更新 ip_info）
+                if (openBtn) openBtn.dataset.address = this.value;
                 const col = this.dataset.col;
                 const id = parseInt(this.dataset.id);
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
-                // 如果地址列是 'address'，则同步到 'ip_info'
                 if (col === 'address') {
                     const ip = record.data.ip_address || '';
                     record.data.ip_info = ip;
-                    // 同时更新显示
                     renderTable();
-                    // 保存记录
                     saveRecord(record);
                 }
                 handleCellChange(this);
             };
         });
 
-        // 当 IP地址 变化时，同步更新 IP信息
+        // IP地址变化同步到IP信息
         $$('.cell-input[data-col="ip_address"]').forEach(input => {
             input.onchange = function() {
                 const id = parseInt(this.dataset.id);
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
-                const ip = this.value.trim();
-                record.data.ip_info = ip;
-                // 重新渲染表格
+                record.data.ip_info = this.value.trim();
                 renderTable();
-                // 保存记录
                 saveRecord(record);
             };
         });
 
-        // 日期输入变化后，自动更新关联字段（host_expire 根据 host_purchase + months 计算）
+        // 日期关联计算
         $$('.date-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
                 const id = parseInt(this.dataset.id);
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
-                // 如果修改的是 host_purchase，重新计算 host_expire
                 if (col === 'host_purchase') {
-                    const purchaseDate = this.value;
+                    const purchase = this.value;
                     const months = parseInt(record.data.months) || 1;
-                    if (purchaseDate) {
-                        const d = new Date(purchaseDate);
+                    if (purchase) {
+                        const d = new Date(purchase);
                         d.setMonth(d.getMonth() + months);
-                        const expireStr = d.toISOString().split('T')[0];
-                        record.data.host_expire = expireStr;
+                        record.data.host_expire = d.toISOString().split('T')[0];
                         renderTable();
                         saveRecord(record);
                     }
                 }
-                // 如果修改的是 client_purchase，重新计算 client_expire（默认 +1个月）
                 if (col === 'client_purchase') {
-                    const purchaseDate = this.value;
-                    if (purchaseDate) {
-                        const d = new Date(purchaseDate);
+                    const purchase = this.value;
+                    if (purchase) {
+                        const d = new Date(purchase);
                         d.setMonth(d.getMonth() + 1);
-                        const expireStr = d.toISOString().split('T')[0];
-                        record.data.client_expire = expireStr;
+                        record.data.client_expire = d.toISOString().split('T')[0];
                         renderTable();
                         saveRecord(record);
                     }
                 }
-                // 如果修改的是 host_expire 或 client_expire，需要重新计算剩余天数和是否过期（在渲染时自动计算）
                 if (col === 'host_expire' || col === 'client_expire') {
                     renderTable();
                     saveRecord(record);
@@ -776,20 +730,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 处理单元格变化（通用） ---
+    // 单元格变化通用处理
     function handleCellChange(input) {
         const colKey = input.dataset.col;
         const id = parseInt(input.dataset.id);
         let val = input.value;
         const col = state.columns.find(c => c.col_key === colKey);
         if (!col) return;
-        // 特殊列不保存（剩余天数、是否过期等自动计算字段）
         if (col.col_type === 'days_remaining' || colKey === 'is_expired') return;
 
         const record = state.records.find(r => r.id === id);
         if (!record) return;
 
-        // 类型转换
         if (col.col_type === 'number') {
             if (val !== '' && !isNaN(val)) val = parseFloat(val);
             else val = 0;
@@ -804,7 +756,6 @@ document.addEventListener('DOMContentLoaded', function() {
         record.data[colKey] = val;
         record._updated = true;
 
-        // 如果修改了 months，重新计算 host_expire
         if (colKey === 'months') {
             const purchase = record.data.host_purchase;
             if (purchase) {
@@ -813,15 +764,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 record.data.host_expire = d.toISOString().split('T')[0];
             }
         }
-
-        // 如果修改了 ip_address，同步到 ip_info
         if (colKey === 'ip_address') {
             record.data.ip_info = val;
         }
 
         if (record._saveTimeout) clearTimeout(record._saveTimeout);
         record._saveTimeout = setTimeout(() => saveRecord(record), 300);
-        // 重新渲染表格以更新关联字段
         renderTable();
     }
 
@@ -841,14 +789,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 添加行（自动填充日期） ---
+    // 添加行
     async function addRow() {
         if (!state.currentTabId) return;
         try {
             setStatus('🔄 添加中...');
             const data = {};
             state.columns.forEach(col => { data[col.col_key] = ''; });
-            // 自动填充日期
             const now = new Date();
             const today = now.toISOString().split('T')[0];
             const nextMonth = getNextMonth(now).toISOString().split('T')[0];
@@ -868,7 +815,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 添加失败: ' + err.message); }
     }
 
-    // --- 删除选中 ---
+    // 删除选中
     async function deleteSelected() {
         const ids = Array.from(state.selectedRows);
         if (ids.length === 0) { setStatus('⚠️ 请选择行'); return; }
@@ -883,7 +830,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // --- 导出/导入 ---
+    // 导出导入（省略，保持之前版本）
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -975,10 +922,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- 列管理 ---
     async function showColumnManager() {
-        if (!state.currentTabId) {
-            setStatus('⚠️ 请先选择一个标签');
-            return;
-        }
+        if (!state.currentTabId) { setStatus('⚠️ 请先选择一个标签'); return; }
         columnModal.classList.add('show');
         await renderColumnList();
         const tab = state.tabs.find(t => t.id === state.currentTabId);
@@ -1010,7 +954,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         columnList.innerHTML = html;
 
-        // 拖拽排序
+        // 拖拽
         const items = columnList.querySelectorAll('.column-item');
         items.forEach(item => {
             item.addEventListener('dragstart', function(e) {
@@ -1059,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 收入/支出标记切换
+        // 收入/支出标记
         columnList.querySelectorAll('.income-toggle').forEach(btn => {
             btn.addEventListener('click', async function() {
                 const id = parseInt(this.dataset.id);
@@ -1098,18 +1042,11 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     };
 
-    // 添加列
     async function addColumn() {
         const name = newColName.value.trim();
         const type = newColType.value;
-        if (!name) {
-            setStatus('⚠️ 请输入列名称');
-            return;
-        }
-        if (!state.currentTabId) {
-            setStatus('⚠️ 请先选择一个标签');
-            return;
-        }
+        if (!name) { setStatus('⚠️ 请输入列名称'); return; }
+        if (!state.currentTabId) { setStatus('⚠️ 请先选择一个标签'); return; }
 
         const ts = Date.now();
         const rand = Math.random().toString(36).substring(2, 6);
@@ -1137,7 +1074,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 统计页面（修复：使用 expense 和 fee） ---
+    // --- 统计 ---
     function renderStats() {
         if (!state.currentTabId) return;
         const records = state.records;
@@ -1146,17 +1083,13 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // 计算总支出（expense）和总收入（fee）
         let totalExpense = 0, totalIncome = 0;
         records.forEach(r => {
-            const expense = parseFloat(r.data.expense) || 0;
-            const fee = parseFloat(r.data.fee) || 0;
-            totalExpense += expense;
-            totalIncome += fee;
+            totalExpense += parseFloat(r.data.expense) || 0;
+            totalIncome += parseFloat(r.data.fee) || 0;
         });
         const net = totalIncome - totalExpense;
 
-        // 按日期分组（使用 host_purchase 或 client_purchase）
         const groups = {};
         records.forEach(record => {
             const dateVal = record.data.host_purchase || record.data.client_purchase || '';
@@ -1216,9 +1149,7 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadRegisterSwitch() {
         try {
             const data = await API.get('/settings/allow_register');
-            if (data.value !== undefined) {
-                allowRegisterCheckbox.checked = data.value !== false;
-            }
+            if (data.value !== undefined) allowRegisterCheckbox.checked = data.value !== false;
         } catch (err) {}
     }
     async function saveRegisterSwitch() {
@@ -1226,20 +1157,17 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             await API.post('/settings', { key: 'allow_register', value });
             registerSwitchStatus.textContent = '✅ 已保存';
-            setTimeout(() => { registerSwitchStatus.textContent = ''; }, 3000);
+            setTimeout(() => registerSwitchStatus.textContent = '', 3000);
         } catch (err) {
             registerSwitchStatus.textContent = '❌ 保存失败: ' + err.message;
         }
     }
 
-    // --- Favicon上传 ---
+    // --- Favicon ---
     async function uploadFavicon() {
         const fileInput = document.getElementById('faviconFileInput');
         const file = fileInput.files[0];
-        if (!file) {
-            document.getElementById('faviconStatus').textContent = '⚠️ 请选择文件';
-            return;
-        }
+        if (!file) { document.getElementById('faviconStatus').textContent = '⚠️ 请选择文件'; return; }
         const formData = new FormData();
         formData.append('image', file);
         try {
@@ -1260,9 +1188,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (result.success) {
                     document.getElementById('faviconStatus').textContent = '✅ 图标已更新，请刷新浏览器查看';
                     const link = document.querySelector("link[rel*='icon']");
-                    if (link) {
-                        link.href = data.url + '?v=' + Date.now();
-                    }
+                    if (link) link.href = data.url + '?v=' + Date.now();
                 } else {
                     document.getElementById('faviconStatus').textContent = '❌ 保存图标失败: ' + (result.error || '');
                 }
