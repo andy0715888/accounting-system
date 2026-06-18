@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>记账系统</title>
-    <!-- 添加 favicon 占位，用户可上传替换 -->
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/css/main.css">
 </head>
@@ -18,6 +17,7 @@
             <span class="nav-user">👤 <span id="usernameDisplay">用户</span></span>
         </div>
         <div class="nav-right">
+            <span id="currentTimeDisplay" style="font-size:14px;opacity:0.8;margin-right:16px;"></span>
             <button class="nav-btn" id="logoutBtn">🚪 退出</button>
         </div>
     </header>
@@ -82,7 +82,7 @@
             <div id="view-settings" class="view-panel">
                 <h2>⚙️ 系统设置</h2>
                 <div class="settings-container">
-                    <!-- 注册开关（仅管理员可见） -->
+                    <!-- 注册开关 -->
                     <div class="setting-group" id="registerSwitchGroup" style="display:none;">
                         <h3>🔓 注册管理</h3>
                         <p class="setting-desc">关闭后，新用户无法注册</p>
@@ -150,7 +150,7 @@
                         </div>
                     </div>
 
-                    <!-- 网站图标 (favicon) -->
+                    <!-- 网站图标 -->
                     <div class="setting-group">
                         <h3>🖼️ 网站图标 (Favicon)</h3>
                         <p class="setting-desc">上传 .ico 或 .png 图片，刷新浏览器后生效</p>
@@ -182,6 +182,7 @@
                         <option value="select">下拉选择</option>
                         <option value="boolean">布尔</option>
                         <option value="days_remaining">剩余天数</option>
+                        <option value="address_select">地址选择</option>
                     </select>
                     <button class="tool-btn primary" id="addColBtn">添加列</button>
                 </div>
