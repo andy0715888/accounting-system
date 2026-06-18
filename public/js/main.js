@@ -1,4 +1,4 @@
-console.log('main.js loaded'); // 用于验证脚本是否加载
+console.log('main.js loaded');
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM ready');
@@ -167,6 +167,7 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadRecords(tabId) {
         const records = await API.get('/records?tabId=' + tabId);
         state.records = records;
+        // 更新筛选选项
         state.columns.forEach(col => {
             state.filterOptions[col.col_key] = getUniqueValues(col.col_key);
         });
@@ -362,10 +363,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                 } else if (col.col_type === 'date') {
                     const dateVal = val || '';
+                    // 日期控件：输入框 + 下拉按钮 + 下拉面板
                     inputHtml = `
                         <div class="date-control">
                             <input type="date" class="cell-input date-input" data-col="${colKey}" data-id="${record.id}" value="${dateVal}" />
-                            <div class="date-quick-buttons">
+                            <button class="date-dropdown-btn" data-col="${colKey}" data-id="${record.id}">📅</button>
+                            <div class="date-dropdown-panel" data-col="${colKey}" data-id="${record.id}">
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="0">清除</button>
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="today">今天</button>
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="1">单月</button>
@@ -401,7 +404,7 @@ document.addEventListener('DOMContentLoaded', function() {
         autoFitColumns();
     }
 
-    // 自动调整列宽
+    // 自动调整列宽（基于内容，给空单元格最小宽度）
     function autoFitColumns() {
         const table = document.getElementById('dataTable');
         if (!table) return;
@@ -415,12 +418,16 @@ document.addEventListener('DOMContentLoaded', function() {
             for (let i = 0; i < row.cells.length; i++) {
                 const cell = row.cells[i];
                 const text = cell.textContent || cell.innerText || '';
-                // 估算宽度（中文字符约14px，字母约8px）
+                // 估算宽度，空单元格也给一个最小宽度
                 let width = 0;
-                for (let ch of text) {
-                    width += (ch.charCodeAt(0) > 127) ? 14 : 8;
+                if (text.length === 0) {
+                    width = 80; // 最小宽度
+                } else {
+                    for (let ch of text) {
+                        width += (ch.charCodeAt(0) > 127) ? 14 : 8;
+                    }
+                    width += 20; // padding
                 }
-                width += 20; // padding
                 if (width > colWidths[i]) colWidths[i] = width;
             }
         });
@@ -585,11 +592,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 特殊控件事件
+    // 特殊控件事件（日期下拉、月数、地址等）
     function bindSpecialEvents() {
-        // 日期快捷
+        // 日期下拉按钮点击切换面板
+        $$('.date-dropdown-btn').forEach(btn => {
+            btn.onclick = function(e) {
+                e.stopPropagation();
+                const col = this.dataset.col;
+                const id = this.dataset.id;
+                const panel = document.querySelector(`.date-dropdown-panel[data-col="${col}"][data-id="${id}"]`);
+                if (!panel) return;
+                // 关闭其他面板
+                $$('.date-dropdown-panel.show').forEach(p => { if (p !== panel) p.classList.remove('show'); });
+                panel.classList.toggle('show');
+            };
+        });
+
+        // 日期快捷按钮点击（位于下拉面板中）
         $$('.date-quick').forEach(btn => {
-            btn.onclick = function() {
+            btn.onclick = function(e) {
+                e.stopPropagation();
                 const col = this.dataset.col;
                 const id = parseInt(this.dataset.id);
                 const offset = this.dataset.offset;
@@ -610,6 +632,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 input.value = dateStr;
                 handleCellChange(input);
+                // 关闭面板
+                const panel = this.closest('.date-dropdown-panel');
+                if (panel) panel.classList.remove('show');
             };
         });
 
@@ -728,6 +753,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             };
         });
+
+        // 点击页面其他地方关闭日期下拉面板
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.date-control')) {
+                $$('.date-dropdown-panel.show').forEach(p => p.classList.remove('show'));
+            }
+        });
     }
 
     // 单元格变化通用处理
@@ -808,6 +840,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await API.post('/records', { tab_id: state.currentTabId, data });
             const newRecord = { id: result.id, data };
             state.records.unshift(newRecord);
+            // 更新筛选选项
+            state.columns.forEach(col => {
+                state.filterOptions[col.col_key] = getUniqueValues(col.col_key);
+            });
             renderTable();
             setStatus('✅ 添加成功');
             const firstInput = document.querySelector('.cell-input');
@@ -825,6 +861,10 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.post('/records/batch-delete', { ids });
             state.records = state.records.filter(r => !ids.includes(r.id));
             state.selectedRows.clear();
+            // 更新筛选选项
+            state.columns.forEach(col => {
+                state.filterOptions[col.col_key] = getUniqueValues(col.col_key);
+            });
             renderTable();
             setStatus(`✅ 已删除 ${ids.length} 条记录`);
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
