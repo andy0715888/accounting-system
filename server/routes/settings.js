@@ -10,7 +10,6 @@ function requireAuth(req, res, next) {
     next();
 }
 
-// 获取所有设置
 router.get('/', requireAuth, async (req, res) => {
     try {
         const userId = req.session.userId;
@@ -19,12 +18,11 @@ router.get('/', requireAuth, async (req, res) => {
         settings.forEach(s => {
             try { result[s.key] = JSON.parse(s.value); } catch { result[s.key] = s.value; }
         });
-        // 额外返回全局注册开关（该设置对所有用户有效，但存在用户级则覆盖）
         const globalAllow = await queryOne("SELECT value FROM settings WHERE key = 'allow_register'");
         if (globalAllow) {
             try { result.allow_register = JSON.parse(globalAllow.value); } catch { result.allow_register = globalAllow.value; }
         } else {
-            result.allow_register = true; // 默认允许
+            result.allow_register = true;
         }
         res.json(result);
     } catch (err) {
@@ -39,7 +37,6 @@ router.get('/:key', requireAuth, async (req, res) => {
         const { key } = req.params;
         const setting = await queryOne('SELECT value FROM settings WHERE user_id = ? AND key = ?', [userId, key]);
         if (!setting) {
-            // 如果是注册开关，检查全局设置
             if (key === 'allow_register') {
                 const global = await queryOne("SELECT value FROM settings WHERE key = 'allow_register'");
                 if (global) {
@@ -62,9 +59,7 @@ router.post('/', requireAuth, async (req, res) => {
         const { key, value } = req.body;
         if (!key) return res.status(400).json({ error: '设置键不能为空' });
 
-        // 如果是注册开关，存到全局（不区分用户）
         if (key === 'allow_register') {
-            // 检查是否为管理员（这里简单判断 userId=1 为管理员）
             if (userId !== 1) {
                 return res.status(403).json({ error: '只有管理员可以修改注册开关' });
             }
@@ -72,7 +67,7 @@ router.post('/', requireAuth, async (req, res) => {
             await execute(`
                 INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?)
                 ON CONFLICT(user_id, key) DO UPDATE SET value = ?
-            `, [1, key, jsonValue, jsonValue]); // 存入 userId=1 作为全局
+            `, [1, key, jsonValue, jsonValue]);
             return res.json({ success: true, message: '注册开关已更新' });
         }
 
@@ -140,7 +135,8 @@ router.post('/cert', requireAuth, async (req, res) => {
         res.status(500).json({ error: '服务器错误' });
     }
 });
-// 添加在 settings.js 的末尾
+
+// 修复 favicon 接口：返回 JSON
 router.post('/favicon', requireAuth, async (req, res) => {
     try {
         const { path: filePath } = req.body;
