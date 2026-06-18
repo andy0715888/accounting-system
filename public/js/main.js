@@ -1,4 +1,3 @@
-// public/js/main.js
 document.addEventListener('DOMContentLoaded', function() {
     let state = {
         tabs: [],
@@ -6,7 +5,8 @@ document.addEventListener('DOMContentLoaded', function() {
         columns: [],
         records: [],
         selectedRows: new Set(),
-        filters: {},
+        filters: {}, // { colKey: string }
+        filterOptions: {}, // { colKey: [unique values] }
         isLoaded: false,
         userName: '',
         isAdmin: false
@@ -53,6 +53,19 @@ document.addEventListener('DOMContentLoaded', function() {
     const registerSwitchStatus = $('#registerSwitchStatus');
     const registerSwitchGroup = $('#registerSwitchGroup');
 
+    // --- 菜单切换（修复） ---
+    $$('.menu-item').forEach(item => {
+        item.addEventListener('click', function() {
+            $$('.menu-item').forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            const view = this.dataset.view;
+            $$('.view-panel').forEach(p => p.classList.remove('active'));
+            const target = document.getElementById('view-' + view);
+            if (target) target.classList.add('active');
+            if (view === 'stats') renderStats();
+        });
+    });
+
     // --- 时间显示 ---
     function updateClock() {
         const now = new Date();
@@ -92,11 +105,11 @@ document.addEventListener('DOMContentLoaded', function() {
         return diff;
     }
 
-    // 判断是否过期
+    // 判断是否过期（基于主机到期时间）
     function checkExpired(expireDateStr) {
-        if (!expireDateStr) return '';
+        if (!expireDateStr) return '未知';
         const days = computeDaysRemaining(expireDateStr);
-        if (days === '') return '';
+        if (days === '') return '未知';
         return days >= 0 ? '有效' : '过期';
     }
 
@@ -105,6 +118,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const d = new Date(date);
         d.setMonth(d.getMonth() + 1);
         return d;
+    }
+
+    // 获取某列的所有唯一值（用于筛选下拉）
+    function getUniqueValues(colKey) {
+        const values = new Set();
+        state.records.forEach(r => {
+            const v = getCellValue(r, colKey);
+            if (v !== '' && v !== null && v !== undefined) values.add(String(v));
+        });
+        return Array.from(values).sort();
     }
 
     // --- API 封装 ---
@@ -142,6 +165,10 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadRecords(tabId) {
         const records = await API.get('/records?tabId=' + tabId);
         state.records = records;
+        // 更新筛选选项缓存
+        state.columns.forEach(col => {
+            state.filterOptions[col.col_key] = getUniqueValues(col.col_key);
+        });
         return records;
     }
 
@@ -167,7 +194,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (newName && newName.trim() && newName.trim() !== currentName) {
                     try {
                         await API.put('/tabs/' + tabId, { name: newName.trim() });
-                        // 更新本地状态
                         const tab = state.tabs.find(t => t.id === tabId);
                         if (tab) tab.name = newName.trim();
                         renderTabs();
@@ -249,7 +275,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (name && name.trim()) createTab(name.trim());
     });
 
-    // --- 渲染表格 ---
+    // --- 渲染表格（自适应列宽、筛选下拉、日期快捷内嵌） ---
     function renderTable() {
         if (!state.currentTabId) return;
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
@@ -262,16 +288,22 @@ document.addEventListener('DOMContentLoaded', function() {
             let incomeLabel = '';
             if (isIncome === 1) incomeLabel = '💰';
             else if (isIncome === 2) incomeLabel = '💸';
-            // 检查筛选是否激活
             const hasFilter = state.filters[col.col_key] ? 'filter-active' : '';
             theadHtml += `
-                <th data-col="${col.col_key}" style="width:${col.col_width || 150}px;min-width:80px;">
+                <th data-col="${col.col_key}" style="min-width:80px;">
                     <div class="th-inner">
                         <span class="col-name">${col.col_name} ${incomeLabel}</span>
                         <button class="col-dropdown-btn ${hasFilter}" data-col="${col.col_key}">▼</button>
                     </div>
                     <div class="col-dropdown-panel" data-col="${col.col_key}">
-                        <input type="text" placeholder="筛选..." class="filter-input" data-col="${col.col_key}" value="${state.filters[col.col_key] || ''}" />
+                        <div class="filter-input-wrap">
+                            <input type="text" placeholder="搜索..." class="filter-input" data-col="${col.col_key}" value="${state.filters[col.col_key] || ''}" />
+                        </div>
+                        <div class="filter-options">
+                            ${(state.filterOptions[col.col_key] || []).map(opt => 
+                                `<label><input type="checkbox" class="filter-option" data-col="${col.col_key}" value="${opt}" ${state.filters[col.col_key] === opt ? 'checked' : ''} /> ${opt}</label>`
+                            ).join('')}
+                        </div>
                         <div class="filter-actions">
                             <button class="filter-clear" data-col="${col.col_key}">清除</button>
                         </div>
@@ -298,21 +330,18 @@ document.addEventListener('DOMContentLoaded', function() {
             visibleColumns.forEach(col => {
                 const colKey = col.col_key;
                 let val = getCellValue(record, colKey);
-                let displayVal = val;
                 let inputHtml = '';
 
                 // 特殊列类型处理
                 if (col.col_type === 'days_remaining') {
-                    // 剩余天数：需要从对应的日期列计算（优先 host_expire，其次 client_expire）
                     let dateKey = '';
                     if (colKey === 'host_remaining') dateKey = 'host_expire';
                     else if (colKey === 'client_remaining') dateKey = 'client_expire';
                     const days = computeDaysRemaining(record.data[dateKey]);
-                    displayVal = days !== '' ? days + ' 天' : '';
+                    const displayVal = days !== '' ? days + ' 天' : '';
                     const color = days < 0 ? '#f56c6c' : (days <= 7 ? '#e6a23c' : '#333');
                     inputHtml = `<span style="color:${color};">${displayVal}</span>`;
                 } else if (col.col_type === 'address_select') {
-                    // 地址列：下拉 + 打开按钮
                     const options = (col.col_options || []).map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('');
                     const addressValue = val || '';
                     inputHtml = `
@@ -325,7 +354,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     `;
                 } else if (col.col_type === 'number' && colKey === 'months') {
-                    // 月数：增减按钮
                     const num = parseInt(val) || 0;
                     inputHtml = `
                         <div class="months-control">
@@ -335,14 +363,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     `;
                 } else if (col.col_type === 'date') {
-                    // 日期列：增加快捷按钮组
                     const dateVal = val || '';
+                    // 日期快捷按钮放在输入框下方（内联）
                     inputHtml = `
-                        <div>
+                        <div class="date-control">
                             <input type="date" class="cell-input date-input" data-col="${colKey}" data-id="${record.id}" value="${dateVal}" />
                             <div class="date-quick-buttons">
-                                <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="0">今天</button>
-                                <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="1">一个月</button>
+                                <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="0">清除</button>
+                                <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="today">今天</button>
+                                <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="1">单月</button>
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="3">季度</button>
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="6">半年</button>
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="12">一年</button>
@@ -352,6 +381,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (col.col_type === 'select') {
                     const options = (col.col_options || []).map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('');
                     inputHtml = `<select class="cell-input select-cell" data-col="${colKey}" data-id="${record.id}"><option value="">-</option>${options}</select>`;
+                } else if (col.col_type === 'text' && colKey === 'is_expired') {
+                    // 是否过期：根据 host_expire 计算
+                    const expireDate = record.data.host_expire;
+                    const status = checkExpired(expireDate);
+                    const color = status === '有效' ? '#67c23a' : (status === '过期' ? '#f56c6c' : '#999');
+                    inputHtml = `<span style="color:${color};">${status}</span>`;
                 } else {
                     // 普通文本/数字
                     const inputType = col.col_type === 'number' ? 'number' : 'text';
@@ -369,9 +404,46 @@ document.addEventListener('DOMContentLoaded', function() {
         bindTableEvents();
         bindFilterEvents();
         bindSpecialEvents();
+
+        // 自动调整列宽（基于内容）
+        autoFitColumns();
     }
 
-    // --- 筛选逻辑 ---
+    // 自动调整列宽（使用内容宽度）
+    function autoFitColumns() {
+        // 获取所有 th 和 td，计算最大宽度
+        const table = document.getElementById('dataTable');
+        const rows = table.querySelectorAll('tr');
+        const colCount = rows[0] ? rows[0].cells.length : 0;
+        if (colCount === 0) return;
+
+        // 重置所有 th 宽度
+        const ths = table.querySelectorAll('th');
+        ths.forEach(th => th.style.width = '');
+
+        // 计算每列最大文本宽度（近似）
+        const colWidths = new Array(colCount).fill(0);
+        rows.forEach(row => {
+            for (let i = 0; i < row.cells.length; i++) {
+                const cell = row.cells[i];
+                // 获取文本内容（去除内部元素）
+                const text = cell.textContent || cell.innerText || '';
+                // 估算宽度（每个字符约 14px，加上 padding）
+                const estimatedWidth = text.length * 14 + 20;
+                if (estimatedWidth > colWidths[i]) colWidths[i] = estimatedWidth;
+            }
+        });
+
+        // 设置最小和最大宽度
+        ths.forEach((th, index) => {
+            let width = colWidths[index] || 100;
+            width = Math.max(80, Math.min(width, 300));
+            th.style.width = width + 'px';
+            th.style.minWidth = width + 'px';
+        });
+    }
+
+    // --- 筛选逻辑（支持文本输入和下拉选择） ---
     function getFilteredRecords() {
         let records = state.records;
         for (const [colKey, filterText] of Object.entries(state.filters)) {
@@ -384,8 +456,9 @@ document.addEventListener('DOMContentLoaded', function() {
         return records;
     }
 
-    // --- 绑定筛选事件 ---
+    // --- 绑定筛选事件（包括下拉选项） ---
     function bindFilterEvents() {
+        // 点击下拉按钮
         $$('.col-dropdown-btn').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
@@ -400,16 +473,19 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
+        // 文本输入筛选
         $$('.filter-input').forEach(input => {
             input.oninput = function() {
                 const col = this.dataset.col;
                 const val = this.value.trim();
+                // 同步更新复选框状态
+                const checkboxes = document.querySelectorAll(`.filter-option[data-col="${col}"]`);
+                checkboxes.forEach(cb => cb.checked = false);
                 if (val) state.filters[col] = val;
                 else delete state.filters[col];
                 renderTable();
             };
             input.onclick = (e) => e.stopPropagation();
-            // 按回车关闭面板
             input.onkeydown = (e) => {
                 if (e.key === 'Enter') {
                     const panel = this.closest('.col-dropdown-panel');
@@ -418,6 +494,29 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
+        // 下拉选项筛选（复选框）
+        $$('.filter-option').forEach(cb => {
+            cb.onchange = function() {
+                const col = this.dataset.col;
+                const val = this.value;
+                // 取消其他选项
+                const siblings = document.querySelectorAll(`.filter-option[data-col="${col}"]`);
+                siblings.forEach(s => { if (s !== this) s.checked = false; });
+                if (this.checked) {
+                    state.filters[col] = val;
+                    // 同步输入框
+                    const input = document.querySelector(`.filter-input[data-col="${col}"]`);
+                    if (input) input.value = val;
+                } else {
+                    delete state.filters[col];
+                    const input = document.querySelector(`.filter-input[data-col="${col}"]`);
+                    if (input) input.value = '';
+                }
+                renderTable();
+            };
+        });
+
+        // 清除按钮
         $$('.filter-clear').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
@@ -425,12 +524,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 delete state.filters[col];
                 const input = document.querySelector(`.filter-input[data-col="${col}"]`);
                 if (input) input.value = '';
+                const checkboxes = document.querySelectorAll(`.filter-option[data-col="${col}"]`);
+                checkboxes.forEach(cb => cb.checked = false);
                 renderTable();
                 const panel = document.querySelector(`.col-dropdown-panel[data-col="${col}"]`);
                 if (panel) panel.classList.remove('show');
             };
         });
 
+        // 点击外部关闭下拉
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.col-dropdown-btn') && !e.target.closest('.col-dropdown-panel')) {
                 $$('.col-dropdown-panel.show').forEach(p => p.classList.remove('show'));
@@ -504,25 +606,36 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 特殊列事件（日期快捷、月数增减、地址打开） ---
+    // --- 特殊列事件（日期快捷、月数增减、地址打开、IP同步） ---
     function bindSpecialEvents() {
-        // 日期快捷按钮
+        // 日期快捷按钮（清除、今天、单月、季度、半年、一年）
         $$('.date-quick').forEach(btn => {
             btn.onclick = function() {
                 const col = this.dataset.col;
                 const id = parseInt(this.dataset.id);
-                const offsetMonths = parseInt(this.dataset.offset);
-                const now = new Date();
-                let targetDate = new Date(now);
-                if (offsetMonths > 0) {
-                    targetDate.setMonth(targetDate.getMonth() + offsetMonths);
-                }
-                const dateStr = targetDate.toISOString().split('T')[0];
-                // 更新输入框
+                const offset = this.dataset.offset;
                 const input = document.querySelector(`.date-input[data-col="${col}"][data-id="${id}"]`);
-                if (input) {
-                    input.value = dateStr;
-                    handleCellChange(input);
+                if (!input) return;
+                let dateStr = '';
+                if (offset === '0') {
+                    // 清除
+                    dateStr = '';
+                } else if (offset === 'today') {
+                    const now = new Date();
+                    dateStr = now.toISOString().split('T')[0];
+                } else {
+                    const months = parseInt(offset);
+                    if (!isNaN(months)) {
+                        const now = new Date();
+                        now.setMonth(now.getMonth() + months);
+                        dateStr = now.toISOString().split('T')[0];
+                    }
+                }
+                input.value = dateStr;
+                handleCellChange(input);
+                // 触发日期关联更新（如 host_expire）
+                if (col === 'host_purchase' || col === 'client_purchase') {
+                    // 在 handleCellChange 中会触发重新计算
                 }
             };
         });
@@ -561,7 +674,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     setStatus('⚠️ 请先选择地址类型');
                     return;
                 }
-                // 获取当前行的IP地址或域名
                 const tr = this.closest('tr');
                 const rowId = parseInt(tr.dataset.id);
                 const record = state.records.find(r => r.id === rowId);
@@ -582,7 +694,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 地址下拉变化：更新打开按钮的 data-address
+        // 地址下拉变化：更新打开按钮的 data-address，并同步 IP信息
         $$('.address-select').forEach(sel => {
             sel.onchange = function() {
                 const tr = this.closest('tr');
@@ -590,7 +702,36 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (openBtn) {
                     openBtn.dataset.address = this.value;
                 }
+                // 同步 IP信息（如果该列是 address 列，则更新 ip_info）
+                const col = this.dataset.col;
+                const id = parseInt(this.dataset.id);
+                const record = state.records.find(r => r.id === id);
+                if (!record) return;
+                // 如果地址列是 'address'，则同步到 'ip_info'
+                if (col === 'address') {
+                    const ip = record.data.ip_address || '';
+                    record.data.ip_info = ip;
+                    // 同时更新显示
+                    renderTable();
+                    // 保存记录
+                    saveRecord(record);
+                }
                 handleCellChange(this);
+            };
+        });
+
+        // 当 IP地址 变化时，同步更新 IP信息
+        $$('.cell-input[data-col="ip_address"]').forEach(input => {
+            input.onchange = function() {
+                const id = parseInt(this.dataset.id);
+                const record = state.records.find(r => r.id === id);
+                if (!record) return;
+                const ip = this.value.trim();
+                record.data.ip_info = ip;
+                // 重新渲染表格
+                renderTable();
+                // 保存记录
+                saveRecord(record);
             };
         });
 
@@ -609,11 +750,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         const d = new Date(purchaseDate);
                         d.setMonth(d.getMonth() + months);
                         const expireStr = d.toISOString().split('T')[0];
-                        // 更新 host_expire 字段
                         record.data.host_expire = expireStr;
-                        // 重新渲染表格以反映变化
                         renderTable();
-                        // 保存记录
                         saveRecord(record);
                     }
                 }
@@ -630,7 +768,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
                 // 如果修改的是 host_expire 或 client_expire，需要重新计算剩余天数和是否过期（在渲染时自动计算）
-                // 但我们可以在保存后重新渲染
                 if (col === 'host_expire' || col === 'client_expire') {
                     renderTable();
                     saveRecord(record);
@@ -647,7 +784,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const col = state.columns.find(c => c.col_key === colKey);
         if (!col) return;
         // 特殊列不保存（剩余天数、是否过期等自动计算字段）
-        if (col.col_type === 'days_remaining') return;
+        if (col.col_type === 'days_remaining' || colKey === 'is_expired') return;
 
         const record = state.records.find(r => r.id === id);
         if (!record) return;
@@ -675,6 +812,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 d.setMonth(d.getMonth() + (parseInt(val) || 1));
                 record.data.host_expire = d.toISOString().split('T')[0];
             }
+        }
+
+        // 如果修改了 ip_address，同步到 ip_info
+        if (colKey === 'ip_address') {
+            record.data.ip_info = val;
         }
 
         if (record._saveTimeout) clearTimeout(record._saveTimeout);
@@ -741,7 +883,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // --- 导出/导入（省略，与之前相同，但需注意使用新列） ---
+    // --- 导出/导入 ---
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -851,7 +993,6 @@ document.addEventListener('DOMContentLoaded', function() {
             let incomeLabel = '';
             if (isIncome === 1) incomeLabel = '💰';
             else if (isIncome === 2) incomeLabel = '💸';
-            // 隐藏“普通”“收入”“支出”文字，只显示图标
             html += `
                 <div class="column-item" draggable="true" data-id="${col.id}">
                     <div class="col-info">
