@@ -690,3 +690,53 @@ body {
     .column-add-form { flex-direction:column; }
     .column-add-form input, .column-add-form select { width:100%; }
 }
+/* 日期下拉按钮和面板 */
+.date-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+}
+.date-dropdown-btn {
+    background: #fff;
+    border: 1px solid #dcdfe6;
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1.5;
+}
+.date-dropdown-btn:hover {
+    background: #f0f2f5;
+}
+.date-dropdown-panel {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: #fff;
+    border: 1px solid #dcdfe6;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    padding: 8px;
+    z-index: 100;
+    min-width: 140px;
+    margin-top: 2px;
+}
+.date-dropdown-panel.show {
+    display: block;
+}
+.date-dropdown-panel .date-quick {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 4px 8px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+.date-dropdown-panel .date-quick:hover {
+    background: #f0f2f5;
+}
