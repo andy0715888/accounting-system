@@ -127,8 +127,7 @@ function createDefaultColumnsForTab(userId, tabId) {
         { col_key: 'client_remaining', col_name: '客户剩余天数', col_type: 'days_remaining', col_order: 14 },
         { col_key: 'client_name', col_name: '客户名', col_type: 'text', col_order: 15 },
         { col_key: 'unit_price', col_name: '单价/备注', col_type: 'text', col_order: 16 },
-        // 修改：将 "费用" 改为 "收入"，col_key 保持 fee 不变（避免破坏已有数据）
-        { col_key: 'fee', col_name: '收入', col_type: 'number', col_order: 17 },
+        { col_key: 'fee', col_name: '收入', col_type: 'text', col_order: 17 }, // 改为 text 支持公式
         { col_key: 'is_expired', col_name: '是否过期', col_type: 'text', col_order: 18 }
     ];
 
