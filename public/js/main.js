@@ -1,3 +1,4 @@
+// public/js/main.js
 console.log('main.js loaded');
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -106,6 +107,17 @@ document.addEventListener('DOMContentLoaded', function() {
         return isNaN(n) ? v : n.toFixed(2);
     }
     function getCellValue(record, colKey) { return record.data[colKey] ?? ''; }
+
+    // 计算文本所需宽度（用于自适应列宽）
+    function getTextWidth(text) {
+        if (!text) return 60;
+        let width = 0;
+        for (let ch of text) {
+            width += (ch.charCodeAt(0) > 127) ? 14 : 8;  // 中文字符约14px，英文8px
+        }
+        width += 40; // padding
+        return Math.max(60, Math.min(width, 350));
+    }
 
     // 计算剩余天数
     function computeDaysRemaining(dateStr) {
@@ -273,7 +285,7 @@ document.addEventListener('DOMContentLoaded', function() {
         state.filters = {};
         await loadDataForTab(tabId);
         renderTabs();
-        renderTable();
+        renderTable(false);  // 切换标签时不需要强制自适应（保持已有列宽）
         const tab = state.tabs.find(t => t.id === tabId);
         if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
     }
@@ -327,7 +339,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isIncome === 1) incomeLabel = '💰';
             else if (isIncome === 2) incomeLabel = '💸';
             const hasFilter = state.filters[col.col_key] ? 'filter-active' : '';
-            const width = col.col_width || 150;
+
+            // 自适应列宽：如果用户已拖拽调整过（col_width != 150），则使用保存值；否则根据列名自动计算
+            const savedWidth = col.col_width;
+            const width = (savedWidth && savedWidth !== 150) ? savedWidth : getTextWidth(col.col_name);
+
             theadHtml += `
                 <th data-col="${col.col_key}" style="width:${width}px;min-width:${width}px;max-width:${width}px;">
                     <div class="th-inner">
@@ -394,16 +410,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                 } else if (col.col_type === 'number' && colKey === 'months') {
                     const num = parseInt(val) || 0;
+                    // 月数无上限，移除 max="3"
                     inputHtml = `
                         <div class="months-control">
                             <button class="months-dec" data-col="${colKey}" data-id="${record.id}">-</button>
-                            <input type="number" class="cell-input months-input" data-col="${colKey}" data-id="${record.id}" value="${num}" min="0" max="3" step="1" style="width:40px;text-align:center;" />
+                            <input type="number" class="cell-input months-input" data-col="${colKey}" data-id="${record.id}" value="${num}" min="0" step="1" style="width:60px;text-align:center;" />
                             <button class="months-inc" data-col="${colKey}" data-id="${record.id}">+</button>
                         </div>
                     `;
                 } else if (col.col_type === 'date') {
                     const dateVal = val || '';
-                    // 如果是 host_expire，只读显示
                     if (colKey === 'host_expire') {
                         const display = formatDisplayDate(dateVal);
                         inputHtml = `<span style="color:#333;">${display}</span>`;
@@ -452,36 +468,30 @@ document.addEventListener('DOMContentLoaded', function() {
         bindFilterEvents();
         bindSpecialEvents();
 
+        // 仅当需要自适应时，强制按文字重新计算并更新数据库
         if (shouldAutoFit) {
             autoFitColumns();
         }
     }
 
-    // 自动调整列宽（仅根据表头）
+    // 自动调整列宽（根据表头文字，并保存到数据库）
     function autoFitColumns() {
         const table = document.getElementById('dataTable');
         if (!table) return;
         const ths = table.querySelectorAll('th');
         if (ths.length === 0) return;
         ths.forEach((th, index) => {
-            if (index === 0) return;
-            const text = th.textContent || '';
-            let width = 0;
-            for (let ch of text) {
-                width += (ch.charCodeAt(0) > 127) ? 14 : 8;
-            }
-            width += 40;
-            width = Math.max(80, Math.min(width, 350));
+            if (index === 0) return; // 跳过复选框列
+            const colKey = th.dataset.col;
+            if (!colKey) return;
+            const col = state.columns.find(c => c.col_key === colKey);
+            if (!col) return;
+            const width = getTextWidth(col.col_name);  // 使用统一的文字宽度计算
             th.style.width = width + 'px';
             th.style.minWidth = width + 'px';
-            const colKey = th.dataset.col;
-            if (colKey) {
-                const col = state.columns.find(c => c.col_key === colKey);
-                if (col && col.col_width !== width) {
-                    col.col_width = width;
-                    API.put('/columns/' + col.id, { col_width: width }).catch(() => {});
-                }
-            }
+            // 更新数据库中的列宽
+            col.col_width = width;
+            API.put('/columns/' + col.id, { col_width: width }).catch(() => {});
         });
     }
 
@@ -598,7 +608,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 普通输入框变化（不包括特殊处理的 expense、fee、months、date 等）
+        // 普通输入框变化
         $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
             input.onblur = () => handleCellChange(input);
             input.onkeydown = (e) => {
@@ -668,7 +678,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 月数增减
+        // 月数增减（无上限）
         $$('.months-dec').forEach(btn => {
             btn.onclick = function() {
                 const col = this.dataset.col;
@@ -688,7 +698,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const input = document.querySelector(`.months-input[data-col="${col}"][data-id="${id}"]`);
                 if (!input) return;
                 let val = parseInt(input.value) || 0;
-                if (val < 3) val++;
+                val++;  // 无上限限制
                 input.value = val;
                 handleCellChange(input);
             };
@@ -732,7 +742,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 地址打开按钮（拼接后缀）
+        // 地址打开按钮
         $$('.open-link').forEach(btn => {
             btn.onclick = function() {
                 const address = this.dataset.address;
@@ -780,7 +790,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 收入输入框（支持公式）
+        // 收入输入框
         $$('.fee-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
@@ -1354,7 +1364,7 @@ document.addEventListener('DOMContentLoaded', function() {
     exportBtn.addEventListener('click', exportData);
     importBtn.addEventListener('click', showImportModal);
     refreshBtn.addEventListener('click', function() {
-        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(true));
+        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(true)); // 刷新时自适应列宽
     });
     manageColumnsBtn.addEventListener('click', showColumnManager);
     logoutBtn.addEventListener('click', async function() {
@@ -1460,7 +1470,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 await loadDataForTab(state.currentTabId);
             }
             renderTabs();
-            renderTable(true);
+            renderTable(true); // 首次加载时进行列宽自适应
             setStatus('✅ 加载完成');
             const tab = state.tabs.find(t => t.id === state.currentTabId);
             if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
