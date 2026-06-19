@@ -13,9 +13,8 @@ document.addEventListener('DOMContentLoaded', function() {
         isLoaded: false,
         userName: '',
         isAdmin: false,
-        // 默认后缀（可从服务器加载）
-        ipSuffix: ':666',
-        domainSuffix: ':666/666'
+        ipPortSuffix: '',
+        domainPortSuffix: ''
     };
 
     // DOM 引用
@@ -58,6 +57,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveRegisterSwitchBtn = $('#saveRegisterSwitchBtn');
     const registerSwitchStatus = $('#registerSwitchStatus');
     const registerSwitchGroup = $('#registerSwitchGroup');
+    const ipPortSuffixInput = $('#ipPortSuffixInput');
+    const domainPortSuffixInput = $('#domainPortSuffixInput');
+    const saveSuffixBtn = $('#saveSuffixBtn');
+    const suffixStatus = $('#suffixStatus');
 
     // --- 菜单切换 ---
     function initMenu() {
@@ -91,6 +94,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!d) return '';
         try { const dt = new Date(d); if (isNaN(dt)) return d; return dt.toISOString().split('T')[0]; } catch { return d; }
     }
+    function formatDisplayDate(d) {
+        if (!d) return '';
+        try { const dt = new Date(d); if (isNaN(dt)) return d; return dt.toLocaleDateString('zh-CN'); } catch { return d; }
+    }
+    function formatNumber(v) {
+        if (v === null || v === undefined || v === '') return '';
+        const n = parseFloat(v);
+        return isNaN(n) ? v : n.toFixed(2);
+    }
     function getCellValue(record, colKey) { return record.data[colKey] ?? ''; }
 
     function computeDaysRemaining(dateStr) {
@@ -111,11 +123,19 @@ document.addEventListener('DOMContentLoaded', function() {
         return days >= 0 ? '有效' : '过期';
     }
 
-    function calculateExpire(purchaseDate, months) {
+    function calcHostExpire(purchaseDate, months) {
         if (!purchaseDate) return '';
         const d = new Date(purchaseDate);
-        d.setMonth(d.getMonth() + (parseInt(months) || 0));
+        if (isNaN(d)) return '';
+        const m = parseInt(months) || 0;
+        d.setMonth(d.getMonth() + m);
         return d.toISOString().split('T')[0];
+    }
+
+    function getNextMonth(date) {
+        const d = new Date(date);
+        d.setMonth(d.getMonth() + 1);
+        return d;
     }
 
     function getUniqueValues(colKey) {
@@ -125,6 +145,22 @@ document.addEventListener('DOMContentLoaded', function() {
             if (v !== '' && v !== null && v !== undefined) values.add(String(v));
         });
         return Array.from(values).sort();
+    }
+
+    function evalExpression(expr) {
+        if (!expr || typeof expr !== 'string') return expr;
+        if (!expr.startsWith('=')) return expr;
+        try {
+            const sanitized = expr.slice(1).replace(/[^0-9+\-*/().]/g, '');
+            if (!sanitized) return '';
+            const result = Function('"use strict"; return (' + sanitized + ')')();
+            if (typeof result === 'number' && !isNaN(result)) {
+                return result;
+            }
+            return expr;
+        } catch (e) {
+            return expr;
+        }
     }
 
     // --- API ---
@@ -147,16 +183,6 @@ document.addEventListener('DOMContentLoaded', function() {
             credentials: 'include'
         }).then(r => r.json())
     };
-
-    // --- 加载后缀设置（从服务器） ---
-    async function loadSuffixSettings() {
-        try {
-            const ip = await API.get('/settings/ip_suffix');
-            const domain = await API.get('/settings/domain_suffix');
-            if (ip.value !== undefined && ip.value !== null) state.ipSuffix = ip.value;
-            if (domain.value !== undefined && domain.value !== null) state.domainSuffix = domain.value;
-        } catch (e) { /* 若未设置则使用默认值 */ }
-    }
 
     // --- 数据加载 ---
     async function loadTabs() {
@@ -239,7 +265,7 @@ document.addEventListener('DOMContentLoaded', function() {
         state.filters = {};
         await loadDataForTab(tabId);
         renderTabs();
-        renderTable(false);
+        renderTable();
         const tab = state.tabs.find(t => t.id === tabId);
         if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
     }
@@ -354,7 +380,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <option value="">-</option>
                                 ${options}
                             </select>
-                            <button class="open-link" data-address="${addressValue}" data-id="${record.id}">打开</button>
+                            <button class="open-link" data-address="${addressValue}">打开</button>
                         </div>
                     `;
                 } else if (col.col_type === 'number' && colKey === 'months') {
@@ -368,13 +394,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                 } else if (col.col_type === 'date') {
                     const dateVal = val || '';
-                    let readonly = '';
-                    if (colKey === 'host_expire') readonly = 'readonly';
-                    inputHtml = `
-                        <div class="date-control">
-                            <input type="date" class="cell-input date-input" data-col="${colKey}" data-id="${record.id}" value="${dateVal}" ${readonly} />
-                        </div>
-                    `;
+                    if (colKey === 'host_expire') {
+                        const display = formatDisplayDate(dateVal);
+                        inputHtml = `<span style="color:#333;">${display}</span>`;
+                    } else {
+                        inputHtml = `
+                            <div class="date-control">
+                                <input type="date" class="cell-input date-input" data-col="${colKey}" data-id="${record.id}" value="${dateVal}" />
+                            </div>
+                        `;
+                    }
                 } else if (col.col_type === 'select') {
                     const options = (col.col_options || []).map(opt => `<option value="${opt}" ${opt === val ? 'selected' : ''}>${opt}</option>`).join('');
                     inputHtml = `<select class="cell-input select-cell" data-col="${colKey}" data-id="${record.id}"><option value="">-</option>${options}</select>`;
@@ -388,15 +417,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     const unitPrice = parseFloat(val) || 0;
                     const displayValue = unitPrice * months;
                     inputHtml = `
-                        <input type="number" step="0.01" class="cell-input expense-input" data-col="${colKey}" data-id="${record.id}" value="${unitPrice}" />
-                        <span style="font-size:12px;color:#999;margin-left:4px;">→ ${displayValue.toFixed(2)}</span>
+                        <input type="number" step="0.01" class="cell-input expense-input" data-col="${colKey}" data-id="${record.id}" value="${unitPrice}" style="width:60px;" />
+                        <span style="margin-left:4px;font-weight:bold;">→ ${displayValue.toFixed(2)}</span>
                     `;
-                } else if (colKey === 'income') {
-                    let displayVal = val;
-                    let formula = record.data[colKey + '_raw'] || '';
-                    if (formula) displayVal = val;
+                } else if (colKey === 'fee') {
+                    const displayVal = evalExpression(val);
                     inputHtml = `
-                        <input type="text" class="cell-input income-input" data-col="${colKey}" data-id="${record.id}" value="${formula || val}" placeholder="数字或=公式" />
+                        <input type="text" class="cell-input fee-input" data-col="${colKey}" data-id="${record.id}" value="${val}" style="width:100%;" />
                     `;
                 } else {
                     const inputType = col.col_type === 'number' ? 'number' : 'text';
@@ -556,23 +583,12 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 通用输入框
-        $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.income-input)').forEach(input => {
+        $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
             input.onblur = () => handleCellChange(input);
             input.onkeydown = (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
             };
             if (input.tagName === 'SELECT') input.onchange = () => handleCellChange(input);
-        });
-
-        $$('.expense-input').forEach(input => {
-            input.onblur = () => handleExpenseChange(input);
-            input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } };
-        });
-
-        $$('.income-input').forEach(input => {
-            input.onblur = () => handleIncomeChange(input);
-            input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } };
         });
 
         $$('.col-resize').forEach(handle => {
@@ -606,6 +622,34 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function bindSpecialEvents() {
+        // 日期输入变化
+        $$('.date-input').forEach(input => {
+            input.onchange = function() {
+                const col = this.dataset.col;
+                const id = parseInt(this.dataset.id);
+                const record = state.records.find(r => r.id === id);
+                if (!record) return;
+                const dateVal = this.value;
+                record.data[col] = dateVal;
+                record._updated = true;
+
+                if (col === 'host_purchase') {
+                    const months = parseInt(record.data.months) || 0;
+                    const expireDate = calcHostExpire(dateVal, months);
+                    record.data.host_expire = expireDate;
+                }
+                if (col === 'client_purchase') {
+                    if (dateVal) {
+                        const d = new Date(dateVal);
+                        d.setMonth(d.getMonth() + 1);
+                        record.data.client_expire = d.toISOString().split('T')[0];
+                    }
+                }
+                renderTable(false);
+                saveRecord(record);
+            };
+        });
+
         // 月数增减
         $$('.months-dec').forEach(btn => {
             btn.onclick = function() {
@@ -616,7 +660,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 let val = parseInt(input.value) || 0;
                 if (val > 0) val--;
                 input.value = val;
-                updateHostExpire(id);
                 handleCellChange(input);
             };
         });
@@ -629,55 +672,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 let val = parseInt(input.value) || 0;
                 if (val < 3) val++;
                 input.value = val;
-                updateHostExpire(id);
                 handleCellChange(input);
             };
         });
-
-        // 主机购买时间变化
-        $$('.date-input[data-col="host_purchase"]').forEach(input => {
+        $$('.months-input').forEach(input => {
             input.onchange = function() {
-                const id = parseInt(this.dataset.id);
-                updateHostExpire(id);
                 handleCellChange(this);
             };
         });
 
-        // 地址打开按钮
-        $$('.open-link').forEach(btn => {
-            btn.onclick = function() {
-                const addressType = this.dataset.address;
-                if (!addressType) { setStatus('⚠️ 请先选择地址类型'); return; }
-                const id = parseInt(this.dataset.id);
-                const record = state.records.find(r => r.id === id);
-                if (!record) return;
-                const ip = record.data.ip_address || '';
-                const domain = record.data.domain || '';
-                let base = '';
-                if (addressType === 'IP地址') {
-                    if (!ip) { setStatus('⚠️ IP地址为空'); return; }
-                    base = ip + state.ipSuffix;
-                } else if (addressType === '域名地址') {
-                    if (!domain) { setStatus('⚠️ 域名为空'); return; }
-                    base = domain + state.domainSuffix;
-                }
-                if (base) {
-                    if (!base.startsWith('http://')) base = 'http://' + base;
-                    window.open(base, '_blank');
-                }
-            };
-        });
-
-        // 地址下拉变更
+        // 地址下拉
         $$('.address-select').forEach(sel => {
             sel.onchange = function() {
                 const tr = this.closest('tr');
                 const openBtn = tr.querySelector('.open-link');
                 if (openBtn) openBtn.dataset.address = this.value;
+                const col = this.dataset.col;
                 const id = parseInt(this.dataset.id);
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
-                if (this.dataset.col === 'address') {
+                if (col === 'address') {
                     const ip = record.data.ip_address || '';
                     record.data.ip_info = ip;
                     renderTable(false);
@@ -687,7 +701,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // IP地址变化 → 同步IP信息
+        // IP地址变化同步到IP信息
         $$('.cell-input[data-col="ip_address"]').forEach(input => {
             input.onchange = function() {
                 const id = parseInt(this.dataset.id);
@@ -698,68 +712,69 @@ document.addEventListener('DOMContentLoaded', function() {
                 saveRecord(record);
             };
         });
-    }
 
-    function updateHostExpire(recordId) {
-        const record = state.records.find(r => r.id === recordId);
-        if (!record) return;
-        const purchase = record.data.host_purchase;
-        const months = parseInt(record.data.months) || 0;
-        if (purchase) {
-            const expire = calculateExpire(purchase, months);
-            record.data.host_expire = expire;
-            renderTable(false);
-            saveRecord(record);
-        }
-    }
+        // 地址打开按钮
+        $$('.open-link').forEach(btn => {
+            btn.onclick = function() {
+                const address = this.dataset.address;
+                if (!address) { setStatus('⚠️ 请先选择地址类型'); return; }
+                const tr = this.closest('tr');
+                const rowId = parseInt(tr.dataset.id);
+                const record = state.records.find(r => r.id === rowId);
+                if (!record) return;
+                const ip = record.data.ip_address || '';
+                const domain = record.data.domain || '';
+                let base = '';
+                let suffix = '';
+                if (address === 'IP地址') {
+                    if (!ip) { setStatus('⚠️ IP地址为空'); return; }
+                    base = ip;
+                    suffix = state.ipPortSuffix || '';
+                } else if (address === '域名地址') {
+                    if (!domain) { setStatus('⚠️ 域名为空'); return; }
+                    base = domain;
+                    suffix = state.domainPortSuffix || '';
+                }
+                if (base) {
+                    const url = base + suffix;
+                    let fullUrl = url;
+                    if (!/^https?:\/\//i.test(fullUrl)) {
+                        fullUrl = 'http://' + fullUrl;
+                    }
+                    window.open(fullUrl, '_blank');
+                }
+            };
+        });
 
-    function handleExpenseChange(input) {
-        const colKey = input.dataset.col;
-        const id = parseInt(input.dataset.id);
-        let val = parseFloat(input.value) || 0;
-        const record = state.records.find(r => r.id === id);
-        if (!record) return;
-        record.data[colKey] = val;
-        record._updated = true;
-        renderTable(false);
-        if (record._saveTimeout) clearTimeout(record._saveTimeout);
-        record._saveTimeout = setTimeout(() => saveRecord(record), 300);
-    }
+        // 支出输入框
+        $$('.expense-input').forEach(input => {
+            input.onchange = function() {
+                const col = this.dataset.col;
+                const id = parseInt(this.dataset.id);
+                const val = parseFloat(this.value) || 0;
+                const record = state.records.find(r => r.id === id);
+                if (!record) return;
+                record.data[col] = val;
+                record._updated = true;
+                renderTable(false);
+                saveRecord(record);
+            };
+        });
 
-    function handleIncomeChange(input) {
-        const colKey = input.dataset.col;
-        const id = parseInt(input.dataset.id);
-        let raw = input.value.trim();
-        const record = state.records.find(r => r.id === id);
-        if (!record) return;
-
-        let result = raw;
-        let formula = '';
-        if (raw.startsWith('=')) {
-            formula = raw;
-            try {
-                const expr = raw.substring(1);
-                const sanitized = expr.replace(/[^0-9+\-*/().]/g, '');
-                const computed = Function('"use strict"; return (' + sanitized + ')')();
-                result = computed.toString();
-            } catch (e) {
-                result = '错误';
-                setStatus('⚠️ 公式错误: ' + e.message);
-            }
-        } else {
-            formula = '';
-            result = raw;
-        }
-        record.data[colKey] = result;
-        if (formula) {
-            record.data[colKey + '_raw'] = formula;
-        } else {
-            delete record.data[colKey + '_raw'];
-        }
-        record._updated = true;
-        renderTable(false);
-        if (record._saveTimeout) clearTimeout(record._saveTimeout);
-        record._saveTimeout = setTimeout(() => saveRecord(record), 300);
+        // 收入输入框（公式）
+        $$('.fee-input').forEach(input => {
+            input.onchange = function() {
+                const col = this.dataset.col;
+                const id = parseInt(this.dataset.id);
+                const val = this.value;
+                const record = state.records.find(r => r.id === id);
+                if (!record) return;
+                record.data[col] = val;
+                record._updated = true;
+                renderTable(false);
+                saveRecord(record);
+            };
+        });
     }
 
     function handleCellChange(input) {
@@ -768,12 +783,12 @@ document.addEventListener('DOMContentLoaded', function() {
         let val = input.value;
         const col = state.columns.find(c => c.col_key === colKey);
         if (!col) return;
-        if (col.col_type === 'days_remaining' || colKey === 'is_expired') return;
+        if (colKey === 'expense' || colKey === 'fee' || colKey === 'host_expire' || col.col_type === 'days_remaining' || colKey === 'is_expired') return;
 
         const record = state.records.find(r => r.id === id);
         if (!record) return;
 
-        if (col.col_type === 'number' && colKey !== 'months') {
+        if (col.col_type === 'number') {
             if (val !== '' && !isNaN(val)) val = parseFloat(val);
             else val = 0;
         } else if (col.col_type === 'boolean') {
@@ -787,8 +802,15 @@ document.addEventListener('DOMContentLoaded', function() {
         record.data[colKey] = val;
         record._updated = true;
 
-        if (colKey === 'months' || colKey === 'host_purchase') {
-            updateHostExpire(id);
+        if (colKey === 'months') {
+            const purchase = record.data.host_purchase;
+            if (purchase) {
+                const expireDate = calcHostExpire(purchase, val);
+                record.data.host_expire = expireDate;
+            } else {
+                record.data.host_expire = '';
+            }
+            renderTable(false);
         }
         if (colKey === 'ip_address') {
             record.data.ip_info = val;
@@ -826,9 +848,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const today = now.toISOString().split('T')[0];
             data.host_purchase = today;
             data.months = 1;
-            data.host_expire = calculateExpire(today, 1);
+            data.host_expire = calcHostExpire(today, 1);
             data.client_purchase = today;
-            data.client_expire = calculateExpire(today, 1);
+            const nextMonth = getNextMonth(now).toISOString().split('T')[0];
+            data.client_expire = nextMonth;
+            data.expense = 0;
+            data.fee = '';
 
             const result = await API.post('/records', { tab_id: state.currentTabId, data });
             const newRecord = { id: result.id, data };
@@ -855,7 +880,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // --- 导入导出（省略，保持之前） ---
+    // --- 导出/导入 ---
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -1110,10 +1135,16 @@ document.addEventListener('DOMContentLoaded', function() {
         records.forEach(r => {
             const months = parseInt(r.data.months) || 0;
             const unitPrice = parseFloat(r.data.expense) || 0;
-            const expense = unitPrice * months;
-            totalExpense += expense;
-            const income = parseFloat(r.data.income) || 0;
-            totalIncome += income;
+            totalExpense += unitPrice * months;
+            const feeVal = r.data.fee || '';
+            let feeNum = 0;
+            if (feeVal.startsWith('=')) {
+                const result = evalExpression(feeVal);
+                if (typeof result === 'number') feeNum = result;
+            } else {
+                feeNum = parseFloat(feeVal) || 0;
+            }
+            totalIncome += feeNum;
         });
         const net = totalIncome - totalExpense;
 
@@ -1136,7 +1167,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 const months = parseInt(r.data.months) || 0;
                 const unitPrice = parseFloat(r.data.expense) || 0;
                 dayExpense += unitPrice * months;
-                dayIncome += parseFloat(r.data.income) || 0;
+                const feeVal = r.data.fee || '';
+                let feeNum = 0;
+                if (feeVal.startsWith('=')) {
+                    const result = evalExpression(feeVal);
+                    if (typeof result === 'number') feeNum = result;
+                } else {
+                    feeNum = parseFloat(feeVal) || 0;
+                }
+                dayIncome += feeNum;
             });
             dailyStats.push({ date: dateKey, income: dayIncome, expense: dayExpense, net: dayIncome - dayExpense });
         });
@@ -1171,7 +1210,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.post('/auth/change-password', { oldPassword: oldPwd, newPassword: newPwd });
             changePwdStatus.textContent = '✅ 密码修改成功';
             oldPwdInput.value = ''; newPwdInput.value = ''; confirmPwdInput.value = '';
-        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
+        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message); }
     }
 
     // --- 注册开关 ---
@@ -1188,7 +1227,38 @@ document.addEventListener('DOMContentLoaded', function() {
             registerSwitchStatus.textContent = '✅ 已保存';
             setTimeout(() => registerSwitchStatus.textContent = '', 3000);
         } catch (err) {
-            registerSwitchStatus.textContent = '❌ 保存失败: ' + err.message);
+            registerSwitchStatus.textContent = '❌ 保存失败: ' + err.message;
+        }
+    }
+
+    // --- 后缀设置 ---
+    async function loadSuffixSettings() {
+        try {
+            const ipSuffix = await API.get('/settings/ip_port_suffix');
+            const domainSuffix = await API.get('/settings/domain_port_suffix');
+            if (ipSuffix.value !== null) {
+                state.ipPortSuffix = ipSuffix.value;
+                ipPortSuffixInput.value = ipSuffix.value;
+            }
+            if (domainSuffix.value !== null) {
+                state.domainPortSuffix = domainSuffix.value;
+                domainPortSuffixInput.value = domainSuffix.value;
+            }
+        } catch (err) { console.warn('加载后缀设置失败:', err); }
+    }
+
+    async function saveSuffixSettings() {
+        const ipSuffix = ipPortSuffixInput.value.trim();
+        const domainSuffix = domainPortSuffixInput.value.trim();
+        try {
+            await API.post('/settings', { key: 'ip_port_suffix', value: ipSuffix });
+            await API.post('/settings', { key: 'domain_port_suffix', value: domainSuffix });
+            state.ipPortSuffix = ipSuffix;
+            state.domainPortSuffix = domainSuffix;
+            suffixStatus.textContent = '✅ 已保存';
+            setTimeout(() => suffixStatus.textContent = '', 3000);
+        } catch (err) {
+            suffixStatus.textContent = '❌ 保存失败: ' + err.message;
         }
     }
 
@@ -1225,11 +1295,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + (data.error || '');
             }
         } catch (err) {
-            document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + err.message;
+            document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + err.message);
         }
     }
 
-    // --- 加载设置（不含后缀UI） ---
+    // --- 加载设置 ---
     async function loadSettings() {
         try {
             const cert = await API.get('/settings/cert_path');
@@ -1248,7 +1318,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             await loadRegisterSwitch();
-            await loadSuffixSettings(); // 加载后缀到 state
+            await loadSuffixSettings();
             const auth = await API.get('/auth/check');
             if (auth.loggedIn && auth.user.id === 1) {
                 registerSwitchGroup.style.display = 'block';
@@ -1346,6 +1416,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('faviconStatus').textContent = '';
     });
     saveRegisterSwitchBtn.addEventListener('click', saveRegisterSwitch);
+    saveSuffixBtn.addEventListener('click', saveSuffixSettings);
 
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.key === 'n') { e.preventDefault(); addRow(); }
