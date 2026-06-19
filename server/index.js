@@ -26,6 +26,8 @@ app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
+// 托管上传目录，使背景图片等可被浏览器访问
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.use(session({
     secret: 'accounting-system-secret-key-2024',
