@@ -122,7 +122,6 @@ router.delete('/:id', requireAuth, async (req, res) => {
     }
 });
 
-// 修复：增加 db 引用，确保 reorder 能正常执行
 router.post('/reorder', requireAuth, async (req, res) => {
     try {
         const userId = req.session.userId;
@@ -131,7 +130,7 @@ router.post('/reorder', requireAuth, async (req, res) => {
             return res.status(400).json({ error: '请提供列顺序映射' });
         }
 
-        const db = getDB(); // 获取数据库实例
+        const db = getDB();
         const stmt = db.prepare('UPDATE column_defs SET col_order = ? WHERE id = ? AND user_id = ?');
         for (const [id, order] of Object.entries(orderMap)) {
             stmt.run([order, id, userId]);
