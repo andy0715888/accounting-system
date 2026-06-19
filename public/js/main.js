@@ -9,8 +9,8 @@ document.addEventListener('DOMContentLoaded', function() {
         columns: [],
         records: [],
         selectedRows: new Set(),
-        filters: {},
-        filterOptions: {},
+        filters: {},                // 格式: { colKey: [selectedValue1, selectedValue2, ...] }
+        filterOptions: {},          // 用于缓存每列的所有可选值
         isLoaded: false,
         userName: '',
         isAdmin: false,
@@ -108,15 +108,25 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     function getCellValue(record, colKey) { return record.data[colKey] ?? ''; }
 
-    // 计算文本所需宽度（用于自适应列宽）
-    function getTextWidth(text) {
-        if (!text) return 60;
-        let width = 0;
-        for (let ch of text) {
-            width += (ch.charCodeAt(0) > 127) ? 14 : 8;  // 中文字符约14px，英文8px
+    // 精确测量文本宽度（像素）
+    function measureTextWidth(text) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        // 与表头字体完全一致
+        ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+        return Math.ceil(ctx.measureText(text).width);
+    }
+
+    // 计算列头总宽度：文字宽度 + 下拉按钮宽度(22px) + 内边距(8px) + 收支图标(若有)
+    function calcColumnWidth(col) {
+        let base = measureTextWidth(col.col_name);
+        base += 22; // 下拉箭头按钮宽度
+        // 如果标记了收支，增加图标宽度
+        if (col.is_income === 1 || col.is_income === 2) {
+            base += 20; // emoji图标大约20px
         }
-        width += 40; // padding
-        return Math.max(60, Math.min(width, 350));
+        base += 8; // 左右各留一点空隙
+        return Math.max(60, base);
     }
 
     // 计算剩余天数
@@ -285,7 +295,7 @@ document.addEventListener('DOMContentLoaded', function() {
         state.filters = {};
         await loadDataForTab(tabId);
         renderTabs();
-        renderTable(false);  // 切换标签时不需要强制自适应（保持已有列宽）
+        renderTable(false);
         const tab = state.tabs.find(t => t.id === tabId);
         if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
     }
@@ -339,10 +349,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isIncome === 1) incomeLabel = '💰';
             else if (isIncome === 2) incomeLabel = '💸';
             const hasFilter = state.filters[col.col_key] ? 'filter-active' : '';
-
-            // 自适应列宽：如果用户已拖拽调整过（col_width != 150），则使用保存值；否则根据列名自动计算
             const savedWidth = col.col_width;
-            const width = (savedWidth && savedWidth !== 150) ? savedWidth : getTextWidth(col.col_name);
+            // 列宽：优先用户拖拽保存值，其次自动计算
+            const width = (savedWidth && savedWidth !== 150) ? savedWidth : calcColumnWidth(col);
 
             theadHtml += `
                 <th data-col="${col.col_key}" style="width:${width}px;min-width:${width}px;max-width:${width}px;">
@@ -352,14 +361,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="col-dropdown-panel" data-col="${col.col_key}">
                         <div class="filter-input-wrap">
-                            <input type="text" placeholder="搜索..." class="filter-input" data-col="${col.col_key}" value="${state.filters[col.col_key] || ''}" />
+                            <input type="text" placeholder="搜索选项..." class="filter-search" data-col="${col.col_key}" />
                         </div>
                         <div class="filter-options">
+                            <label class="filter-select-all">
+                                <input type="checkbox" class="filter-select-all-checkbox" data-col="${col.col_key}" /> 全选
+                            </label>
                             ${(state.filterOptions[col.col_key] || []).map(opt => 
-                                `<label><input type="checkbox" class="filter-option" data-col="${col.col_key}" value="${opt}" ${state.filters[col.col_key] === opt ? 'checked' : ''} /> ${opt}</label>`
+                                `<label class="filter-option-label">
+                                    <input type="checkbox" class="filter-option" data-col="${col.col_key}" value="${opt}" /> ${opt}
+                                </label>`
                             ).join('')}
                         </div>
                         <div class="filter-actions">
+                            <button class="filter-ok" data-col="${col.col_key}">确定</button>
                             <button class="filter-clear" data-col="${col.col_key}">清除</button>
                         </div>
                     </div>
@@ -387,7 +402,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 let val = getCellValue(record, colKey);
                 let inputHtml = '';
 
-                // 特殊列类型处理
+                // 特殊列类型处理（保持不变，略...）
                 if (col.col_type === 'days_remaining') {
                     let dateKey = '';
                     if (colKey === 'host_remaining') dateKey = 'host_expire';
@@ -410,7 +425,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                 } else if (col.col_type === 'number' && colKey === 'months') {
                     const num = parseInt(val) || 0;
-                    // 月数无上限，移除 max="3"
                     inputHtml = `
                         <div class="months-control">
                             <button class="months-dec" data-col="${colKey}" data-id="${record.id}">-</button>
@@ -468,7 +482,6 @@ document.addEventListener('DOMContentLoaded', function() {
         bindFilterEvents();
         bindSpecialEvents();
 
-        // 仅当需要自适应时，强制按文字重新计算并更新数据库
         if (shouldAutoFit) {
             autoFitColumns();
         }
@@ -479,108 +492,152 @@ document.addEventListener('DOMContentLoaded', function() {
         const table = document.getElementById('dataTable');
         if (!table) return;
         const ths = table.querySelectorAll('th');
-        if (ths.length === 0) return;
         ths.forEach((th, index) => {
-            if (index === 0) return; // 跳过复选框列
+            if (index === 0) return;
             const colKey = th.dataset.col;
             if (!colKey) return;
             const col = state.columns.find(c => c.col_key === colKey);
             if (!col) return;
-            const width = getTextWidth(col.col_name);  // 使用统一的文字宽度计算
+            const width = calcColumnWidth(col);
             th.style.width = width + 'px';
             th.style.minWidth = width + 'px';
-            // 更新数据库中的列宽
             col.col_width = width;
             API.put('/columns/' + col.id, { col_width: width }).catch(() => {});
         });
     }
 
-    // 筛选
+    // 筛选（仅多选值过滤）
     function getFilteredRecords() {
         let records = state.records;
-        for (const [colKey, filterText] of Object.entries(state.filters)) {
-            if (!filterText) continue;
+        for (const [colKey, selectedValues] of Object.entries(state.filters)) {
+            if (!selectedValues || selectedValues.length === 0) continue;
             records = records.filter(r => {
-                const val = getCellValue(r, colKey);
-                return String(val).toLowerCase().includes(String(filterText).toLowerCase());
+                const val = String(getCellValue(r, colKey));
+                return selectedValues.includes(val);
             });
         }
         return records;
     }
 
-    // 绑定筛选事件
+    // 绑定筛选事件（重写）
     function bindFilterEvents() {
+        // 切换下拉面板
         $$('.col-dropdown-btn').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
                 const col = this.dataset.col;
                 const panel = document.querySelector(`.col-dropdown-panel[data-col="${col}"]`);
                 if (!panel) return;
+                // 关闭其他打开的
                 $$('.col-dropdown-panel.show').forEach(p => { if (p !== panel) p.classList.remove('show'); });
                 panel.classList.toggle('show');
-                const input = panel.querySelector('.filter-input');
-                if (input) setTimeout(() => input.focus(), 100);
+                // 打开时同步复选框状态
+                if (panel.classList.contains('show')) {
+                    syncFilterPanel(panel, col);
+                }
             };
         });
 
-        $$('.filter-input').forEach(input => {
+        // 搜索框输入过滤选项
+        $$('.filter-search').forEach(input => {
             input.oninput = function() {
-                const col = this.dataset.col;
-                const val = this.value.trim();
-                const checkboxes = document.querySelectorAll(`.filter-option[data-col="${col}"]`);
-                checkboxes.forEach(cb => cb.checked = false);
-                if (val) state.filters[col] = val;
-                else delete state.filters[col];
-                renderTable(false);
+                const panel = this.closest('.col-dropdown-panel');
+                const searchText = this.value.trim().toLowerCase();
+                const labels = panel.querySelectorAll('.filter-option-label');
+                labels.forEach(label => {
+                    const text = label.textContent.toLowerCase();
+                    label.style.display = text.includes(searchText) ? '' : 'none';
+                });
+                // 搜索时也更新全选状态
+                updateSelectAllCheckbox(panel);
             };
             input.onclick = (e) => e.stopPropagation();
-            input.onkeydown = (e) => {
-                if (e.key === 'Enter') {
-                    const panel = this.closest('.col-dropdown-panel');
-                    if (panel) panel.classList.remove('show');
-                }
+        });
+
+        // 全选复选框
+        $$('.filter-select-all-checkbox').forEach(cb => {
+            cb.onchange = function() {
+                const panel = this.closest('.col-dropdown-panel');
+                const checked = this.checked;
+                panel.querySelectorAll('.filter-option').forEach(opt => {
+                    opt.checked = checked;
+                });
             };
         });
 
-        $$('.filter-option').forEach(cb => {
-            cb.onchange = function() {
-                const col = this.dataset.col;
-                const val = this.value;
-                const siblings = document.querySelectorAll(`.filter-option[data-col="${col}"]`);
-                siblings.forEach(s => { if (s !== this) s.checked = false; });
-                if (this.checked) {
-                    state.filters[col] = val;
-                    const input = document.querySelector(`.filter-input[data-col="${col}"]`);
-                    if (input) input.value = val;
-                } else {
-                    delete state.filters[col];
-                    const input = document.querySelector(`.filter-input[data-col="${col}"]`);
-                    if (input) input.value = '';
+        // 单个选项变化时更新全选状态
+        $$('.filter-options').forEach(container => {
+            container.addEventListener('change', function(e) {
+                if (e.target.classList.contains('filter-option')) {
+                    updateSelectAllCheckbox(this.closest('.col-dropdown-panel'));
                 }
+            });
+        });
+
+        // 确定按钮
+        $$('.filter-ok').forEach(btn => {
+            btn.onclick = function(e) {
+                e.stopPropagation();
+                const col = this.dataset.col;
+                const panel = document.querySelector(`.col-dropdown-panel[data-col="${col}"]`);
+                const checkedValues = [];
+                panel.querySelectorAll('.filter-option:checked').forEach(cb => checkedValues.push(cb.value));
+                if (checkedValues.length === 0) {
+                    delete state.filters[col];
+                } else {
+                    state.filters[col] = checkedValues;
+                }
+                panel.classList.remove('show');
                 renderTable(false);
             };
         });
 
+        // 清除按钮
         $$('.filter-clear').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
                 const col = this.dataset.col;
                 delete state.filters[col];
-                const input = document.querySelector(`.filter-input[data-col="${col}"]`);
-                if (input) input.value = '';
-                const checkboxes = document.querySelectorAll(`.filter-option[data-col="${col}"]`);
-                checkboxes.forEach(cb => cb.checked = false);
-                renderTable(false);
                 const panel = document.querySelector(`.col-dropdown-panel[data-col="${col}"]`);
-                if (panel) panel.classList.remove('show');
+                panel.classList.remove('show');
+                renderTable(false);
             };
         });
 
+        // 点击外部关闭面板
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.col-dropdown-btn') && !e.target.closest('.col-dropdown-panel')) {
                 $$('.col-dropdown-panel.show').forEach(p => p.classList.remove('show'));
             }
         });
+    }
+
+    // 同步面板复选框状态与当前筛选
+    function syncFilterPanel(panel, colKey) {
+        const selected = state.filters[colKey] || [];
+        const allCheckboxes = panel.querySelectorAll('.filter-option');
+        if (selected.length === 0) {
+            allCheckboxes.forEach(cb => cb.checked = false);
+        } else {
+            allCheckboxes.forEach(cb => {
+                cb.checked = selected.includes(cb.value);
+            });
+        }
+        updateSelectAllCheckbox(panel);
+    }
+
+    // 根据可见选项的选中情况更新全选复选框
+    function updateSelectAllCheckbox(panel) {
+        const allCb = panel.querySelector('.filter-select-all-checkbox');
+        const visibleOptions = panel.querySelectorAll('.filter-option:not([style*="display: none"])');
+        if (visibleOptions.length === 0) {
+            allCb.checked = false;
+            allCb.indeterminate = false;
+            return;
+        }
+        const checkedCount = panel.querySelectorAll('.filter-option:checked:not([style*="display: none"])').length;
+        allCb.checked = checkedCount === visibleOptions.length;
+        allCb.indeterminate = checkedCount > 0 && checkedCount < visibleOptions.length;
     }
 
     // 绑定通用表格事件（复选框、列宽拖拽）
@@ -698,7 +755,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const input = document.querySelector(`.months-input[data-col="${col}"][data-id="${id}"]`);
                 if (!input) return;
                 let val = parseInt(input.value) || 0;
-                val++;  // 无上限限制
+                val++;
                 input.value = val;
                 handleCellChange(input);
             };
@@ -910,7 +967,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // 导出/导入
+    // 导出/导入（保持不变）
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -1000,7 +1057,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.removeChild(link); URL.revokeObjectURL(url);
     }
 
-    // --- 列管理 ---
+    // --- 列管理（保持不变） ---
     async function showColumnManager() {
         if (!state.currentTabId) { setStatus('⚠️ 请先选择一个标签'); return; }
         columnModal.classList.add('show');
@@ -1154,7 +1211,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 统计 ---
+    // --- 统计（保持不变） ---
     function renderStats() {
         if (!state.currentTabId) return;
         const records = state.records;
@@ -1364,7 +1421,7 @@ document.addEventListener('DOMContentLoaded', function() {
     exportBtn.addEventListener('click', exportData);
     importBtn.addEventListener('click', showImportModal);
     refreshBtn.addEventListener('click', function() {
-        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(true)); // 刷新时自适应列宽
+        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(true));
     });
     manageColumnsBtn.addEventListener('click', showColumnManager);
     logoutBtn.addEventListener('click', async function() {
@@ -1470,7 +1527,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 await loadDataForTab(state.currentTabId);
             }
             renderTabs();
-            renderTable(true); // 首次加载时进行列宽自适应
+            renderTable(true);
             setStatus('✅ 加载完成');
             const tab = state.tabs.find(t => t.id === state.currentTabId);
             if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
