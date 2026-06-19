@@ -44,6 +44,9 @@ router.get('/:key', requireAuth, async (req, res) => {
                 }
                 return res.json({ value: true });
             }
+            if (key === 'ip_port_suffix' || key === 'domain_port_suffix') {
+                return res.json({ value: '' });
+            }
             return res.json({ value: null });
         }
         try { res.json({ value: JSON.parse(setting.value) }); } catch { res.json({ value: setting.value }); }
@@ -136,7 +139,6 @@ router.post('/cert', requireAuth, async (req, res) => {
     }
 });
 
-// 修复 favicon 接口：返回 JSON
 router.post('/favicon', requireAuth, async (req, res) => {
     try {
         const { path: filePath } = req.body;
