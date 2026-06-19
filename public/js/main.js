@@ -167,7 +167,6 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadRecords(tabId) {
         const records = await API.get('/records?tabId=' + tabId);
         state.records = records;
-        // 更新筛选选项
         state.columns.forEach(col => {
             state.filterOptions[col.col_key] = getUniqueValues(col.col_key);
         });
@@ -276,12 +275,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- 渲染表格 ---
-    function renderTable() {
+    function renderTable(shouldAutoFit = false) {
         if (!state.currentTabId) return;
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
         const filteredRecords = getFilteredRecords();
 
-        // 表头
+        // 表头 - 固定表格布局，使用 col_width
         let theadHtml = `<tr><th style="width:36px;min-width:36px;max-width:36px;text-align:center;"><input type="checkbox" id="selectAll" /></th>`;
         visibleColumns.forEach(col => {
             const isIncome = col.is_income || 0;
@@ -289,8 +288,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isIncome === 1) incomeLabel = '💰';
             else if (isIncome === 2) incomeLabel = '💸';
             const hasFilter = state.filters[col.col_key] ? 'filter-active' : '';
+            // 列宽：优先使用数据库保存的宽度，否则默认150px
+            const width = col.col_width || 150;
             theadHtml += `
-                <th data-col="${col.col_key}" style="min-width:80px;">
+                <th data-col="${col.col_key}" style="width:${width}px;min-width:${width}px;max-width:${width}px;">
                     <div class="th-inner">
                         <span class="col-name">${col.col_name} ${incomeLabel}</span>
                         <button class="col-dropdown-btn ${hasFilter}" data-col="${col.col_key}">▼</button>
@@ -363,12 +364,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                 } else if (col.col_type === 'date') {
                     const dateVal = val || '';
-                    // 日期控件：输入框 + 下拉按钮 + 下拉面板
+                    // 日期输入框 + 快捷按钮（水平排列）
                     inputHtml = `
                         <div class="date-control">
                             <input type="date" class="cell-input date-input" data-col="${colKey}" data-id="${record.id}" value="${dateVal}" />
-                            <button class="date-dropdown-btn" data-col="${colKey}" data-id="${record.id}">📅</button>
-                            <div class="date-dropdown-panel" data-col="${colKey}" data-id="${record.id}">
+                            <div class="date-quick-buttons">
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="0">清除</button>
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="today">今天</button>
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="1">单月</button>
@@ -398,45 +398,44 @@ document.addEventListener('DOMContentLoaded', function() {
         tableBody.innerHTML = tbodyHtml;
         recordCount.textContent = `共 ${filteredRecords.length} 条记录`;
 
+        // 绑定事件
         bindTableEvents();
         bindFilterEvents();
         bindSpecialEvents();
-        autoFitColumns();
+
+        // 首次加载或刷新时自动调整列宽（仅当 shouldAutoFit 为 true）
+        if (shouldAutoFit) {
+            autoFitColumns();
+        }
     }
 
-    // 自动调整列宽（基于内容，给空单元格最小宽度）
+    // 自动调整列宽（仅计算表头文字宽度，并保存到数据库）
     function autoFitColumns() {
         const table = document.getElementById('dataTable');
         if (!table) return;
-        const rows = table.querySelectorAll('tr');
-        if (rows.length === 0) return;
-        const colCount = rows[0].cells.length;
-        if (colCount === 0) return;
-
-        const colWidths = new Array(colCount).fill(0);
-        rows.forEach(row => {
-            for (let i = 0; i < row.cells.length; i++) {
-                const cell = row.cells[i];
-                const text = cell.textContent || cell.innerText || '';
-                // 估算宽度，空单元格也给一个最小宽度
-                let width = 0;
-                if (text.length === 0) {
-                    width = 80; // 最小宽度
-                } else {
-                    for (let ch of text) {
-                        width += (ch.charCodeAt(0) > 127) ? 14 : 8;
-                    }
-                    width += 20; // padding
-                }
-                if (width > colWidths[i]) colWidths[i] = width;
-            }
-        });
-
         const ths = table.querySelectorAll('th');
+        if (ths.length === 0) return;
+        // 仅根据表头文字估算宽度
         ths.forEach((th, index) => {
-            let width = Math.max(80, Math.min(colWidths[index] + 20, 350));
+            if (index === 0) return; // 复选框列固定
+            const text = th.textContent || '';
+            let width = 0;
+            for (let ch of text) {
+                width += (ch.charCodeAt(0) > 127) ? 14 : 8;
+            }
+            width += 40; // padding + 按钮
+            width = Math.max(80, Math.min(width, 350));
             th.style.width = width + 'px';
             th.style.minWidth = width + 'px';
+            // 更新数据库中的 col_width
+            const colKey = th.dataset.col;
+            if (colKey) {
+                const col = state.columns.find(c => c.col_key === colKey);
+                if (col && col.col_width !== width) {
+                    col.col_width = width;
+                    API.put('/columns/' + col.id, { col_width: width }).catch(() => {});
+                }
+            }
         });
     }
 
@@ -476,7 +475,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 checkboxes.forEach(cb => cb.checked = false);
                 if (val) state.filters[col] = val;
                 else delete state.filters[col];
-                renderTable();
+                renderTable(false);
             };
             input.onclick = (e) => e.stopPropagation();
             input.onkeydown = (e) => {
@@ -502,7 +501,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const input = document.querySelector(`.filter-input[data-col="${col}"]`);
                     if (input) input.value = '';
                 }
-                renderTable();
+                renderTable(false);
             };
         });
 
@@ -515,7 +514,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (input) input.value = '';
                 const checkboxes = document.querySelectorAll(`.filter-option[data-col="${col}"]`);
                 checkboxes.forEach(cb => cb.checked = false);
-                renderTable();
+                renderTable(false);
                 const panel = document.querySelector(`.col-dropdown-panel[data-col="${col}"]`);
                 if (panel) panel.classList.remove('show');
             };
@@ -562,7 +561,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (input.tagName === 'SELECT') input.onchange = () => handleCellChange(input);
         });
 
-        // 列宽拖拽
+        // 列宽拖拽 - 更新数据库
         $$('.col-resize').forEach(handle => {
             let startX, startWidth, colKey;
             handle.onmousedown = (e) => {
@@ -584,6 +583,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (col) {
                         const width = parseInt(th.style.width);
                         if (width > 0) {
+                            col.col_width = width;
                             API.put('/columns/' + col.id, { col_width: width }).catch(() => {});
                         }
                     }
@@ -592,26 +592,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 特殊控件事件（日期下拉、月数、地址等）
+    // 特殊控件事件
     function bindSpecialEvents() {
-        // 日期下拉按钮点击切换面板
-        $$('.date-dropdown-btn').forEach(btn => {
-            btn.onclick = function(e) {
-                e.stopPropagation();
-                const col = this.dataset.col;
-                const id = this.dataset.id;
-                const panel = document.querySelector(`.date-dropdown-panel[data-col="${col}"][data-id="${id}"]`);
-                if (!panel) return;
-                // 关闭其他面板
-                $$('.date-dropdown-panel.show').forEach(p => { if (p !== panel) p.classList.remove('show'); });
-                panel.classList.toggle('show');
-            };
-        });
-
-        // 日期快捷按钮点击（位于下拉面板中）
+        // 日期快捷
         $$('.date-quick').forEach(btn => {
-            btn.onclick = function(e) {
-                e.stopPropagation();
+            btn.onclick = function() {
                 const col = this.dataset.col;
                 const id = parseInt(this.dataset.id);
                 const offset = this.dataset.offset;
@@ -632,9 +617,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 input.value = dateStr;
                 handleCellChange(input);
-                // 关闭面板
-                const panel = this.closest('.date-dropdown-panel');
-                if (panel) panel.classList.remove('show');
             };
         });
 
@@ -700,7 +682,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (col === 'address') {
                     const ip = record.data.ip_address || '';
                     record.data.ip_info = ip;
-                    renderTable();
+                    renderTable(false);
                     saveRecord(record);
                 }
                 handleCellChange(this);
@@ -714,7 +696,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
                 record.data.ip_info = this.value.trim();
-                renderTable();
+                renderTable(false);
                 saveRecord(record);
             };
         });
@@ -733,7 +715,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         const d = new Date(purchase);
                         d.setMonth(d.getMonth() + months);
                         record.data.host_expire = d.toISOString().split('T')[0];
-                        renderTable();
+                        renderTable(false);
                         saveRecord(record);
                     }
                 }
@@ -743,22 +725,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         const d = new Date(purchase);
                         d.setMonth(d.getMonth() + 1);
                         record.data.client_expire = d.toISOString().split('T')[0];
-                        renderTable();
+                        renderTable(false);
                         saveRecord(record);
                     }
                 }
                 if (col === 'host_expire' || col === 'client_expire') {
-                    renderTable();
+                    renderTable(false);
                     saveRecord(record);
                 }
             };
-        });
-
-        // 点击页面其他地方关闭日期下拉面板
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.date-control')) {
-                $$('.date-dropdown-panel.show').forEach(p => p.classList.remove('show'));
-            }
         });
     }
 
@@ -802,7 +777,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (record._saveTimeout) clearTimeout(record._saveTimeout);
         record._saveTimeout = setTimeout(() => saveRecord(record), 300);
-        renderTable();
+        renderTable(false);
     }
 
     function saveRecord(record) {
@@ -821,7 +796,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 添加行
+    // 添加行（不触发自动列宽调整）
     async function addRow() {
         if (!state.currentTabId) return;
         try {
@@ -840,11 +815,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await API.post('/records', { tab_id: state.currentTabId, data });
             const newRecord = { id: result.id, data };
             state.records.unshift(newRecord);
-            // 更新筛选选项
-            state.columns.forEach(col => {
-                state.filterOptions[col.col_key] = getUniqueValues(col.col_key);
-            });
-            renderTable();
+            renderTable(false); // 不自动调整宽度
             setStatus('✅ 添加成功');
             const firstInput = document.querySelector('.cell-input');
             if (firstInput) firstInput.focus();
@@ -861,16 +832,12 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.post('/records/batch-delete', { ids });
             state.records = state.records.filter(r => !ids.includes(r.id));
             state.selectedRows.clear();
-            // 更新筛选选项
-            state.columns.forEach(col => {
-                state.filterOptions[col.col_key] = getUniqueValues(col.col_key);
-            });
-            renderTable();
+            renderTable(false);
             setStatus(`✅ 已删除 ${ids.length} 条记录`);
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // 导出导入（省略，保持之前版本）
+    // 导出导入（保持不变）
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -935,7 +902,7 @@ document.addEventListener('DOMContentLoaded', function() {
             importStatus.textContent = `🔄 导入 ${records.length} 条...`;
             await API.post('/records/import', { tab_id: state.currentTabId, records });
             await loadDataForTab(state.currentTabId);
-            renderTable();
+            renderTable(false);
             importStatus.textContent = `✅ 成功导入 ${records.length} 条`;
             setTimeout(() => importModal.classList.remove('show'), 1500);
         } catch (err) {
@@ -977,12 +944,13 @@ document.addEventListener('DOMContentLoaded', function() {
             let incomeLabel = '';
             if (isIncome === 1) incomeLabel = '💰';
             else if (isIncome === 2) incomeLabel = '💸';
+            // 如果 isIncome=0 显示空（普通），但可点击切换
             html += `
                 <div class="column-item" draggable="true" data-id="${col.id}">
                     <div class="col-info">
                         <span><strong>${col.col_name}</strong></span>
                         <span class="col-key">(${col.col_key})</span>
-                        <button class="income-toggle ${isIncome === 1 ? 'active-income' : (isIncome === 2 ? 'active-expense' : '')}" data-id="${col.id}">${incomeLabel}</button>
+                        <button class="income-toggle ${isIncome === 1 ? 'active-income' : (isIncome === 2 ? 'active-expense' : '')}" data-id="${col.id}">${incomeLabel || '普通'}</button>
                         <span style="color:#999;font-size:12px;">${col.col_visible === 1 ? '👁️' : '🙈'}</span>
                     </div>
                     <div class="col-actions">
@@ -1033,7 +1001,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     await API.post('/columns/reorder', { orderMap });
                     state.columns = cols;
                     renderColumnList();
-                    renderTable();
+                    renderTable(false);
                     setStatus('✅ 顺序已更新');
                 } catch (err) {
                     setStatus('❌ 更新失败: ' + err.message);
@@ -1043,7 +1011,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 收入/支出标记
+        // 收入/支出标记切换（修复）
         columnList.querySelectorAll('.income-toggle').forEach(btn => {
             btn.addEventListener('click', async function() {
                 const id = parseInt(this.dataset.id);
@@ -1055,7 +1023,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     await API.put('/columns/' + id, { is_income: newVal });
                     col.is_income = newVal;
                     renderColumnList();
-                    renderTable();
+                    renderTable(false);
                     setStatus('✅ 标记已更新');
                 } catch (err) { setStatus('❌ 更新失败: ' + err.message); }
             });
@@ -1067,7 +1035,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.put('/columns/' + id, { col_visible: currentVisible === 1 ? 0 : 1 });
             await loadColumns(state.currentTabId);
             renderColumnList();
-            renderTable();
+            renderTable(false);
             setStatus('✅ 列状态已更新');
         } catch (err) { setStatus('❌ 更新失败: ' + err.message); }
     };
@@ -1077,7 +1045,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.delete('/columns/' + id);
             await loadColumns(state.currentTabId);
             renderColumnList();
-            renderTable();
+            renderTable(false);
             setStatus('✅ 列已删除');
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     };
@@ -1104,7 +1072,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 newColName.value = '';
                 await loadColumns(state.currentTabId);
                 renderColumnList();
-                renderTable();
+                renderTable(false);
                 setStatus('✅ 列添加成功');
             } else {
                 setStatus('❌ 添加失败: ' + (result.error || '未知错误'));
@@ -1114,7 +1082,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 统计 ---
+    // --- 统计（使用 fee 作为收入） ---
     function renderStats() {
         if (!state.currentTabId) return;
         const records = state.records;
@@ -1126,7 +1094,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let totalExpense = 0, totalIncome = 0;
         records.forEach(r => {
             totalExpense += parseFloat(r.data.expense) || 0;
-            totalIncome += parseFloat(r.data.fee) || 0;
+            totalIncome += parseFloat(r.data.fee) || 0; // fee 字段作为收入
         });
         const net = totalIncome - totalExpense;
 
@@ -1272,7 +1240,7 @@ document.addEventListener('DOMContentLoaded', function() {
     exportBtn.addEventListener('click', exportData);
     importBtn.addEventListener('click', showImportModal);
     refreshBtn.addEventListener('click', function() {
-        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable());
+        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(true)); // 刷新时自动调整宽度
     });
     manageColumnsBtn.addEventListener('click', showColumnManager);
     logoutBtn.addEventListener('click', async function() {
@@ -1377,7 +1345,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 await loadDataForTab(state.currentTabId);
             }
             renderTabs();
-            renderTable();
+            renderTable(true); // 初始化时自动调整宽度
             setStatus('✅ 加载完成');
             const tab = state.tabs.find(t => t.id === state.currentTabId);
             if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
