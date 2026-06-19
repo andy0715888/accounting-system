@@ -11,13 +11,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const bgLayer = document.getElementById('bgLayer');
     const errorMsg = document.getElementById('errorMsg');
 
+    function cssUrl(url) {
+        return String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
     function setRandomBackground() {
         const hue = Math.floor(Math.random() * 360);
         const saturation = 60 + Math.floor(Math.random() * 30);
         const lightness = 40 + Math.floor(Math.random() * 30);
-        const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-        bgLayer.style.background = color;
+        bgLayer.style.backgroundImage = '';
+        bgLayer.style.backgroundColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        bgLayer.style.backgroundSize = '';
+        bgLayer.style.backgroundPosition = '';
     }
+
+    function applyBackground(url) {
+        if (!url) return;
+        bgLayer.style.backgroundColor = 'transparent';
+        bgLayer.style.backgroundImage = `url("${cssUrl(url)}")`;
+        bgLayer.style.backgroundSize = 'cover';
+        bgLayer.style.backgroundPosition = 'center';
+        bgLayer.style.backgroundRepeat = 'no-repeat';
+    }
+
     setRandomBackground();
 
     fetch('/api/auth/check', { credentials: 'include' })
@@ -26,30 +42,13 @@ document.addEventListener('DOMContentLoaded', function() {
         .catch(() => {});
 
     function loadBackground() {
-        fetch('/api/settings/background', { credentials: 'include' })
+        fetch('/api/settings/public/background')
             .then(res => res.json())
             .then(data => {
-                if (data.value) {
-                    const bg = data.value;
-                    let url = '';
-                    if (bg.type === 'url') url = bg.url;
-                    else if (bg.type === 'local' && bg.path) url = bg.path;
-                    if (url) {
-                        const img = new Image();
-                        img.crossOrigin = 'anonymous';
-                        img.onload = function() {
-                            bgLayer.style.backgroundImage = `url(${url})`;
-                            bgLayer.style.backgroundSize = 'cover';
-                            bgLayer.style.backgroundPosition = 'center';
-                            bgLayer.style.background = 'none';
-                            bgLayer.style.backgroundColor = 'transparent';
-                        };
-                        img.onerror = function() {
-                            console.warn('背景图片加载失败，使用随机颜色');
-                        };
-                        img.src = url;
-                    }
-                }
+                if (!data.value) return;
+                const bg = data.value;
+                if (bg.type === 'url') applyBackground(bg.url);
+                else if (bg.type === 'local') applyBackground(bg.path);
             })
             .catch(() => {});
     }
