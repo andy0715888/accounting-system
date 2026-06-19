@@ -109,7 +109,6 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 showError('✅ 注册成功，请登录');
-                // 隐藏注册表单，显示登录表单
                 registerForm.style.display = 'none';
                 document.querySelector('.login-footer:not(.register-form)').style.display = 'block';
                 usernameInput.value = username;
