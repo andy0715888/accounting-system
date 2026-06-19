@@ -132,6 +132,20 @@ document.addEventListener('DOMContentLoaded', function() {
         return Array.from(values).sort();
     }
 
+    // 计算表达式（简单安全）
+    function evaluateFormula(expr) {
+        if (!expr.startsWith('=')) return expr;
+        try {
+            // 只允许数字、运算符、括号、空格
+            const clean = expr.substring(1).replace(/[^0-9+\-*/().\s]/g, '');
+            if (!clean) return '';
+            const result = Function('"use strict"; return (' + clean + ')')();
+            return isNaN(result) ? expr : String(result);
+        } catch {
+            return expr;
+        }
+    }
+
     // --- API ---
     const API = {
         get: (url) => fetch('/api' + url, { credentials: 'include' }).then(r => r.json()),
@@ -234,7 +248,7 @@ document.addEventListener('DOMContentLoaded', function() {
         state.filters = {};
         await loadDataForTab(tabId);
         renderTabs();
-        renderTable();
+        renderTable(true);
         const tab = state.tabs.find(t => t.id === tabId);
         if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
     }
@@ -280,7 +294,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
         const filteredRecords = getFilteredRecords();
 
-        // 表头 - 固定表格布局，使用 col_width
+        // 表头
         let theadHtml = `<tr><th style="width:36px;min-width:36px;max-width:36px;text-align:center;"><input type="checkbox" id="selectAll" /></th>`;
         visibleColumns.forEach(col => {
             const isIncome = col.is_income || 0;
@@ -288,7 +302,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isIncome === 1) incomeLabel = '💰';
             else if (isIncome === 2) incomeLabel = '💸';
             const hasFilter = state.filters[col.col_key] ? 'filter-active' : '';
-            // 列宽：优先使用数据库保存的宽度，否则默认150px
             const width = col.col_width || 150;
             theadHtml += `
                 <th data-col="${col.col_key}" style="width:${width}px;min-width:${width}px;max-width:${width}px;">
@@ -333,6 +346,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 let val = getCellValue(record, colKey);
                 let inputHtml = '';
 
+                // 特殊列类型处理
                 if (col.col_type === 'days_remaining') {
                     let dateKey = '';
                     if (colKey === 'host_remaining') dateKey = 'host_expire';
@@ -342,15 +356,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     const color = days < 0 ? '#f56c6c' : (days <= 7 ? '#e6a23c' : '#333');
                     inputHtml = `<span style="color:${color};">${displayVal}</span>`;
                 } else if (col.col_type === 'address_select') {
+                    // 地址列：下拉 + 后缀输入框 + 打开按钮
                     const options = (col.col_options || []).map(opt => `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`).join('');
-                    const addressValue = val || '';
+                    const addressType = val || '';
+                    // 从记录中读取后缀
+                    const ipSuffix = record.data.ip_suffix || '';
+                    const domainSuffix = record.data.domain_suffix || '';
+                    const suffix = addressType === 'IP地址' ? ipSuffix : (addressType === '域名地址' ? domainSuffix : '');
                     inputHtml = `
                         <div class="address-control">
                             <select class="cell-input address-select" data-col="${colKey}" data-id="${record.id}">
                                 <option value="">-</option>
                                 ${options}
                             </select>
-                            <button class="open-link" data-address="${addressValue}">打开</button>
+                            <input type="text" class="address-suffix" data-col="${colKey}" data-id="${record.id}" value="${suffix}" placeholder="后缀" style="width:60px;font-size:12px;padding:2px 4px;border:1px solid #dcdfe6;border-radius:4px;" />
+                            <button class="open-link" data-address="${addressType}" data-suffix="${suffix}" data-id="${record.id}">打开</button>
                         </div>
                     `;
                 } else if (col.col_type === 'number' && colKey === 'months') {
@@ -363,11 +383,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     `;
                 } else if (col.col_type === 'date') {
+                    // 日期列：如果是 host_expire，设置为只读
+                    const isReadonly = (colKey === 'host_expire');
                     const dateVal = val || '';
-                    // 日期输入框 + 快捷按钮（水平排列）
                     inputHtml = `
                         <div class="date-control">
-                            <input type="date" class="cell-input date-input" data-col="${colKey}" data-id="${record.id}" value="${dateVal}" />
+                            <input type="date" class="cell-input date-input" data-col="${colKey}" data-id="${record.id}" value="${dateVal}" ${isReadonly ? 'readonly' : ''} style="${isReadonly ? 'background:#f5f7fa;cursor:not-allowed;' : ''}" />
                             <div class="date-quick-buttons">
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="0">清除</button>
                                 <button class="date-quick" data-col="${colKey}" data-id="${record.id}" data-offset="today">今天</button>
@@ -386,7 +407,31 @@ document.addEventListener('DOMContentLoaded', function() {
                     const status = checkExpired(expireDate);
                     const color = status === '有效' ? '#67c23a' : (status === '过期' ? '#f56c6c' : '#999');
                     inputHtml = `<span style="color:${color};">${status}</span>`;
+                } else if (colKey === 'expense') {
+                    // 支出：存储单价，显示单价*月数
+                    const months = parseInt(record.data.months) || 0;
+                    const unitPrice = parseFloat(val) || 0;
+                    const total = unitPrice * months;
+                    // 显示计算值，但编辑时编辑单价
+                    inputHtml = `
+                        <div class="expense-control">
+                            <span class="expense-display" style="display:inline-block;min-width:60px;">${total.toFixed(2)}</span>
+                            <input type="number" class="cell-input expense-input" data-col="${colKey}" data-id="${record.id}" value="${unitPrice}" step="0.01" style="width:60px;display:none;" />
+                            <button class="expense-edit-btn" data-id="${record.id}">✎</button>
+                        </div>
+                    `;
+                } else if (colKey === 'fee') {
+                    // 收入：支持公式，显示计算结果，编辑时显示公式
+                    const displayVal = evaluateFormula(val);
+                    inputHtml = `
+                        <div class="fee-control">
+                            <span class="fee-display" style="display:inline-block;min-width:60px;">${displayVal}</span>
+                            <input type="text" class="cell-input fee-input" data-col="${colKey}" data-id="${record.id}" value="${val}" style="width:80px;display:none;" />
+                            <button class="fee-edit-btn" data-id="${record.id}">✎</button>
+                        </div>
+                    `;
                 } else {
+                    // 普通文本/数字
                     const inputType = col.col_type === 'number' ? 'number' : 'text';
                     const step = col.col_type === 'number' ? 'step="0.01"' : '';
                     inputHtml = `<input type="${inputType}" class="cell-input" data-col="${colKey}" data-id="${record.id}" value="${val || ''}" ${step} />`;
@@ -403,31 +448,28 @@ document.addEventListener('DOMContentLoaded', function() {
         bindFilterEvents();
         bindSpecialEvents();
 
-        // 首次加载或刷新时自动调整列宽（仅当 shouldAutoFit 为 true）
         if (shouldAutoFit) {
             autoFitColumns();
         }
     }
 
-    // 自动调整列宽（仅计算表头文字宽度，并保存到数据库）
+    // 自动调整列宽（仅表头）
     function autoFitColumns() {
         const table = document.getElementById('dataTable');
         if (!table) return;
         const ths = table.querySelectorAll('th');
         if (ths.length === 0) return;
-        // 仅根据表头文字估算宽度
         ths.forEach((th, index) => {
-            if (index === 0) return; // 复选框列固定
+            if (index === 0) return;
             const text = th.textContent || '';
             let width = 0;
             for (let ch of text) {
                 width += (ch.charCodeAt(0) > 127) ? 14 : 8;
             }
-            width += 40; // padding + 按钮
+            width += 40;
             width = Math.max(80, Math.min(width, 350));
             th.style.width = width + 'px';
             th.style.minWidth = width + 'px';
-            // 更新数据库中的 col_width
             const colKey = th.dataset.col;
             if (colKey) {
                 const col = state.columns.find(c => c.col_key === colKey);
@@ -552,8 +594,8 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 普通输入框变化
-        $$('.cell-input:not(.address-select):not(.months-input):not(.date-input)').forEach(input => {
+        // 普通输入框变化（排除特殊控件）
+        $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
             input.onblur = () => handleCellChange(input);
             input.onkeydown = (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
@@ -561,7 +603,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (input.tagName === 'SELECT') input.onchange = () => handleCellChange(input);
         });
 
-        // 列宽拖拽 - 更新数据库
+        // 列宽拖拽
         $$('.col-resize').forEach(handle => {
             let startX, startWidth, colKey;
             handle.onmousedown = (e) => {
@@ -602,6 +644,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 const offset = this.dataset.offset;
                 const input = document.querySelector(`.date-input[data-col="${col}"][data-id="${id}"]`);
                 if (!input) return;
+                // 如果是 host_expire，禁止修改
+                if (col === 'host_expire') {
+                    setStatus('⚠️ 主机到期时间由购买时间和月数自动计算，不可手动修改');
+                    return;
+                }
                 let dateStr = '';
                 if (offset === '0') {
                     dateStr = '';
@@ -646,46 +693,132 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 地址打开
+        // 地址相关
+        $$('.address-select').forEach(sel => {
+            sel.onchange = function() {
+                const col = this.dataset.col;
+                const id = parseInt(this.dataset.id);
+                // 同步后缀输入框的值到记录
+                const suffixInput = this.closest('.address-control').querySelector('.address-suffix');
+                const suffix = suffixInput ? suffixInput.value : '';
+                const record = state.records.find(r => r.id === id);
+                if (!record) return;
+                const addressType = this.value;
+                if (addressType === 'IP地址') {
+                    record.data.ip_suffix = suffix;
+                } else if (addressType === '域名地址') {
+                    record.data.domain_suffix = suffix;
+                }
+                handleCellChange(this);
+            };
+        });
+
+        $$('.address-suffix').forEach(input => {
+            input.onchange = function() {
+                const col = this.dataset.col;
+                const id = parseInt(this.dataset.id);
+                const record = state.records.find(r => r.id === id);
+                if (!record) return;
+                const addressType = document.querySelector(`.address-select[data-col="${col}"][data-id="${id}"]`).value;
+                if (addressType === 'IP地址') {
+                    record.data.ip_suffix = this.value;
+                } else if (addressType === '域名地址') {
+                    record.data.domain_suffix = this.value;
+                }
+                // 更新打开按钮的 data-suffix
+                const openBtn = this.closest('.address-control').querySelector('.open-link');
+                if (openBtn) openBtn.dataset.suffix = this.value;
+                saveRecord(record);
+                setStatus('✅ 后缀已保存');
+            };
+        });
+
+        // 打开按钮
         $$('.open-link').forEach(btn => {
             btn.onclick = function() {
-                const address = this.dataset.address;
-                if (!address) { setStatus('⚠️ 请先选择地址类型'); return; }
-                const tr = this.closest('tr');
-                const rowId = parseInt(tr.dataset.id);
-                const record = state.records.find(r => r.id === rowId);
+                const addressType = this.dataset.address;
+                const suffix = this.dataset.suffix || '';
+                const id = parseInt(this.dataset.id);
+                const record = state.records.find(r => r.id === id);
                 if (!record) return;
                 const ip = record.data.ip_address || '';
                 const domain = record.data.domain || '';
                 let url = '';
-                if (address === 'IP地址') {
+                if (addressType === 'IP地址') {
                     if (!ip) { setStatus('⚠️ IP地址为空'); return; }
-                    url = 'http://' + ip;
-                } else if (address === '域名地址') {
+                    url = 'http://' + ip + suffix;
+                } else if (addressType === '域名地址') {
                     if (!domain) { setStatus('⚠️ 域名为空'); return; }
-                    url = 'http://' + domain;
+                    url = 'http://' + domain + suffix;
                 }
                 if (url) window.open(url, '_blank');
             };
         });
 
-        // 地址下拉变更，同步IP信息
-        $$('.address-select').forEach(sel => {
-            sel.onchange = function() {
-                const tr = this.closest('tr');
-                const openBtn = tr.querySelector('.open-link');
-                if (openBtn) openBtn.dataset.address = this.value;
-                const col = this.dataset.col;
+        // 支出编辑切换
+        $$('.expense-edit-btn').forEach(btn => {
+            btn.onclick = function() {
                 const id = parseInt(this.dataset.id);
-                const record = state.records.find(r => r.id === id);
-                if (!record) return;
-                if (col === 'address') {
-                    const ip = record.data.ip_address || '';
-                    record.data.ip_info = ip;
-                    renderTable(false);
-                    saveRecord(record);
+                const row = this.closest('tr');
+                const display = row.querySelector('.expense-display');
+                const input = row.querySelector('.expense-input');
+                if (display.style.display !== 'none') {
+                    display.style.display = 'none';
+                    input.style.display = 'inline-block';
+                    input.focus();
+                    input.select();
+                } else {
+                    display.style.display = 'inline-block';
+                    input.style.display = 'none';
+                    // 保存单价
+                    handleCellChange(input);
                 }
-                handleCellChange(this);
+            };
+        });
+        // 支出输入框失焦保存
+        $$('.expense-input').forEach(input => {
+            input.onblur = function() {
+                const btn = this.closest('.expense-control').querySelector('.expense-edit-btn');
+                if (btn) btn.click();
+            };
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.blur();
+                }
+            };
+        });
+
+        // 收入编辑切换
+        $$('.fee-edit-btn').forEach(btn => {
+            btn.onclick = function() {
+                const id = parseInt(this.dataset.id);
+                const row = this.closest('tr');
+                const display = row.querySelector('.fee-display');
+                const input = row.querySelector('.fee-input');
+                if (display.style.display !== 'none') {
+                    display.style.display = 'none';
+                    input.style.display = 'inline-block';
+                    input.focus();
+                    input.select();
+                } else {
+                    display.style.display = 'inline-block';
+                    input.style.display = 'none';
+                    // 保存公式
+                    handleCellChange(input);
+                }
+            };
+        });
+        $$('.fee-input').forEach(input => {
+            input.onblur = function() {
+                const btn = this.closest('.fee-control').querySelector('.fee-edit-btn');
+                if (btn) btn.click();
+            };
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.blur();
+                }
             };
         });
 
@@ -701,35 +834,41 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 日期关联计算
-        $$('.date-input').forEach(input => {
+        // 日期关联计算（host_expire 根据 host_purchase + months）
+        $$('.date-input[data-col="host_purchase"]').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
                 const id = parseInt(this.dataset.id);
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
-                if (col === 'host_purchase') {
-                    const purchase = this.value;
-                    const months = parseInt(record.data.months) || 1;
-                    if (purchase) {
-                        const d = new Date(purchase);
-                        d.setMonth(d.getMonth() + months);
-                        record.data.host_expire = d.toISOString().split('T')[0];
-                        renderTable(false);
-                        saveRecord(record);
-                    }
+                const purchase = this.value;
+                const months = parseInt(record.data.months) || 0;
+                if (purchase) {
+                    const d = new Date(purchase);
+                    d.setMonth(d.getMonth() + months);
+                    record.data.host_expire = d.toISOString().split('T')[0];
+                    renderTable(false);
+                    saveRecord(record);
                 }
-                if (col === 'client_purchase') {
-                    const purchase = this.value;
-                    if (purchase) {
-                        const d = new Date(purchase);
-                        d.setMonth(d.getMonth() + 1);
-                        record.data.client_expire = d.toISOString().split('T')[0];
-                        renderTable(false);
-                        saveRecord(record);
-                    }
-                }
-                if (col === 'host_expire' || col === 'client_expire') {
+            };
+        });
+
+        // 客户购买时间变化，客户到期时间可自由编辑，无关联
+        // 无需特殊处理，因为 client_expire 可手动编辑
+
+        // 月数变化时重新计算 host_expire
+        $$('.months-input').forEach(input => {
+            input.onchange = function() {
+                const id = parseInt(this.dataset.id);
+                const record = state.records.find(r => r.id === id);
+                if (!record) return;
+                const months = parseInt(this.value) || 0;
+                record.data.months = months;
+                const purchase = record.data.host_purchase;
+                if (purchase) {
+                    const d = new Date(purchase);
+                    d.setMonth(d.getMonth() + months);
+                    record.data.host_expire = d.toISOString().split('T')[0];
                     renderTable(false);
                     saveRecord(record);
                 }
@@ -744,11 +883,14 @@ document.addEventListener('DOMContentLoaded', function() {
         let val = input.value;
         const col = state.columns.find(c => c.col_key === colKey);
         if (!col) return;
+        // 特殊列不保存（剩余天数、是否过期、显示字段等）
         if (col.col_type === 'days_remaining' || colKey === 'is_expired') return;
+        if (colKey === 'host_expire') return; // 只读，不保存
 
         const record = state.records.find(r => r.id === id);
         if (!record) return;
 
+        // 类型转换
         if (col.col_type === 'number') {
             if (val !== '' && !isNaN(val)) val = parseFloat(val);
             else val = 0;
@@ -764,10 +906,11 @@ document.addEventListener('DOMContentLoaded', function() {
         record._updated = true;
 
         if (colKey === 'months') {
+            // 重新计算 host_expire
             const purchase = record.data.host_purchase;
             if (purchase) {
                 const d = new Date(purchase);
-                d.setMonth(d.getMonth() + (parseInt(val) || 1));
+                d.setMonth(d.getMonth() + (parseInt(val) || 0));
                 record.data.host_expire = d.toISOString().split('T')[0];
             }
         }
@@ -796,7 +939,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 添加行（不触发自动列宽调整）
+    // 添加行（自动填充日期，并初始化新字段）
     async function addRow() {
         if (!state.currentTabId) return;
         try {
@@ -805,17 +948,23 @@ document.addEventListener('DOMContentLoaded', function() {
             state.columns.forEach(col => { data[col.col_key] = ''; });
             const now = new Date();
             const today = now.toISOString().split('T')[0];
-            const nextMonth = getNextMonth(now).toISOString().split('T')[0];
             data.host_purchase = today;
-            data.host_expire = nextMonth;
-            data.client_purchase = today;
-            data.client_expire = nextMonth;
             data.months = 1;
+            // 计算 host_expire
+            const d = new Date(today);
+            d.setMonth(d.getMonth() + 1);
+            data.host_expire = d.toISOString().split('T')[0];
+            data.client_purchase = today;
+            data.client_expire = ''; // 留空，用户自己选
+            data.ip_suffix = '';
+            data.domain_suffix = '';
+            data.expense = 0;
+            data.fee = '';
 
             const result = await API.post('/records', { tab_id: state.currentTabId, data });
             const newRecord = { id: result.id, data };
             state.records.unshift(newRecord);
-            renderTable(false); // 不自动调整宽度
+            renderTable(false);
             setStatus('✅ 添加成功');
             const firstInput = document.querySelector('.cell-input');
             if (firstInput) firstInput.focus();
@@ -944,7 +1093,6 @@ document.addEventListener('DOMContentLoaded', function() {
             let incomeLabel = '';
             if (isIncome === 1) incomeLabel = '💰';
             else if (isIncome === 2) incomeLabel = '💸';
-            // 如果 isIncome=0 显示空（普通），但可点击切换
             html += `
                 <div class="column-item" draggable="true" data-id="${col.id}">
                     <div class="col-info">
@@ -1011,7 +1159,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 收入/支出标记切换（修复）
+        // 收入/支出标记切换
         columnList.querySelectorAll('.income-toggle').forEach(btn => {
             btn.addEventListener('click', async function() {
                 const id = parseInt(this.dataset.id);
@@ -1093,8 +1241,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         let totalExpense = 0, totalIncome = 0;
         records.forEach(r => {
-            totalExpense += parseFloat(r.data.expense) || 0;
-            totalIncome += parseFloat(r.data.fee) || 0; // fee 字段作为收入
+            const months = parseInt(r.data.months) || 0;
+            const unitPrice = parseFloat(r.data.expense) || 0;
+            totalExpense += unitPrice * months;
+            const feeVal = r.data.fee || '';
+            const result = evaluateFormula(feeVal);
+            const incomeNum = parseFloat(result);
+            if (!isNaN(incomeNum)) totalIncome += incomeNum;
         });
         const net = totalIncome - totalExpense;
 
@@ -1114,8 +1267,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const dayRecords = groups[dateKey];
             let dayExpense = 0, dayIncome = 0;
             dayRecords.forEach(r => {
-                dayExpense += parseFloat(r.data.expense) || 0;
-                dayIncome += parseFloat(r.data.fee) || 0;
+                const months = parseInt(r.data.months) || 0;
+                const unitPrice = parseFloat(r.data.expense) || 0;
+                dayExpense += unitPrice * months;
+                const feeVal = r.data.fee || '';
+                const result = evaluateFormula(feeVal);
+                const incomeNum = parseFloat(result);
+                if (!isNaN(incomeNum)) dayIncome += incomeNum;
             });
             dailyStats.push({ date: dateKey, income: dayIncome, expense: dayExpense, net: dayIncome - dayExpense });
         });
@@ -1240,7 +1398,7 @@ document.addEventListener('DOMContentLoaded', function() {
     exportBtn.addEventListener('click', exportData);
     importBtn.addEventListener('click', showImportModal);
     refreshBtn.addEventListener('click', function() {
-        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(true)); // 刷新时自动调整宽度
+        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(true));
     });
     manageColumnsBtn.addEventListener('click', showColumnManager);
     logoutBtn.addEventListener('click', async function() {
@@ -1345,7 +1503,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 await loadDataForTab(state.currentTabId);
             }
             renderTabs();
-            renderTable(true); // 初始化时自动调整宽度
+            renderTable(true);
             setStatus('✅ 加载完成');
             const tab = state.tabs.find(t => t.id === state.currentTabId);
             if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
