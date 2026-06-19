@@ -150,6 +150,24 @@
                         </div>
                     </div>
 
+                    <!-- 地址后缀设置 -->
+                    <div class="setting-group">
+                        <h3>🔗 地址端口后缀</h3>
+                        <p class="setting-desc">设置后，点击"打开"时自动拼接后缀</p>
+                        <div class="suffix-setting">
+                            <div class="input-group">
+                                <label>IP地址后缀 (如 :666)</label>
+                                <input type="text" id="ipPortSuffixInput" placeholder=":666" />
+                            </div>
+                            <div class="input-group">
+                                <label>域名后缀 (如 :666/666)</label>
+                                <input type="text" id="domainPortSuffixInput" placeholder=":666/666" />
+                            </div>
+                            <button class="tool-btn primary" id="saveSuffixBtn">保存后缀设置</button>
+                            <span id="suffixStatus"></span>
+                        </div>
+                    </div>
+
                     <!-- 网站图标 -->
                     <div class="setting-group">
                         <h3>🖼️ 网站图标 (Favicon)</h3>
@@ -164,7 +182,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- 列管理弹窗 -->
     <div class="modal-overlay" id="columnModal">
         <div class="modal">
