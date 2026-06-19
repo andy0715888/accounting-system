@@ -57,6 +57,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveRegisterSwitchBtn = $('#saveRegisterSwitchBtn');
     const registerSwitchStatus = $('#registerSwitchStatus');
     const registerSwitchGroup = $('#registerSwitchGroup');
+
+    // 地址后缀设置 DOM
     const ipPortSuffixInput = $('#ipPortSuffixInput');
     const domainPortSuffixInput = $('#domainPortSuffixInput');
     const saveSuffixBtn = $('#saveSuffixBtn');
@@ -105,6 +107,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     function getCellValue(record, colKey) { return record.data[colKey] ?? ''; }
 
+    // 计算剩余天数
     function computeDaysRemaining(dateStr) {
         if (!dateStr) return '';
         const target = new Date(dateStr);
@@ -116,6 +119,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return diff;
     }
 
+    // 判断是否过期
     function checkExpired(expireDateStr) {
         if (!expireDateStr) return '未知';
         const days = computeDaysRemaining(expireDateStr);
@@ -123,6 +127,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return days >= 0 ? '有效' : '过期';
     }
 
+    // 计算主机到期时间
     function calcHostExpire(purchaseDate, months) {
         if (!purchaseDate) return '';
         const d = new Date(purchaseDate);
@@ -132,12 +137,14 @@ document.addEventListener('DOMContentLoaded', function() {
         return d.toISOString().split('T')[0];
     }
 
+    // 获取下个月同一天
     function getNextMonth(date) {
         const d = new Date(date);
         d.setMonth(d.getMonth() + 1);
         return d;
     }
 
+    // 获取唯一值
     function getUniqueValues(colKey) {
         const values = new Set();
         state.records.forEach(r => {
@@ -147,6 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return Array.from(values).sort();
     }
 
+    // 计算表达式
     function evalExpression(expr) {
         if (!expr || typeof expr !== 'string') return expr;
         if (!expr.startsWith('=')) return expr;
@@ -305,7 +313,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (name && name.trim()) createTab(name.trim());
     });
 
-    // --- 渲染表格 ---
+    // --- 渲染表格（核心） ---
     function renderTable(shouldAutoFit = false) {
         if (!state.currentTabId) return;
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
@@ -363,6 +371,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 let val = getCellValue(record, colKey);
                 let inputHtml = '';
 
+                // 特殊列类型处理
                 if (col.col_type === 'days_remaining') {
                     let dateKey = '';
                     if (colKey === 'host_remaining') dateKey = 'host_expire';
@@ -394,6 +403,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                 } else if (col.col_type === 'date') {
                     const dateVal = val || '';
+                    // 如果是 host_expire，只读显示
                     if (colKey === 'host_expire') {
                         const display = formatDisplayDate(dateVal);
                         inputHtml = `<span style="color:#333;">${display}</span>`;
@@ -437,6 +447,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tableBody.innerHTML = tbodyHtml;
         recordCount.textContent = `共 ${filteredRecords.length} 条记录`;
 
+        // 绑定事件
         bindTableEvents();
         bindFilterEvents();
         bindSpecialEvents();
@@ -446,6 +457,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // 自动调整列宽（仅根据表头）
     function autoFitColumns() {
         const table = document.getElementById('dataTable');
         if (!table) return;
@@ -473,6 +485,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // 筛选
     function getFilteredRecords() {
         let records = state.records;
         for (const [colKey, filterText] of Object.entries(state.filters)) {
@@ -485,6 +498,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return records;
     }
 
+    // 绑定筛选事件
     function bindFilterEvents() {
         $$('.col-dropdown-btn').forEach(btn => {
             btn.onclick = function(e) {
@@ -559,6 +573,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // 绑定通用表格事件（复选框、列宽拖拽）
     function bindTableEvents() {
         const selectAll = $('#selectAll');
         if (selectAll) {
@@ -583,6 +598,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
+        // 普通输入框变化（不包括特殊处理的 expense、fee、months、date 等）
         $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
             input.onblur = () => handleCellChange(input);
             input.onkeydown = (e) => {
@@ -591,6 +607,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (input.tagName === 'SELECT') input.onchange = () => handleCellChange(input);
         });
 
+        // 列宽拖拽
         $$('.col-resize').forEach(handle => {
             let startX, startWidth, colKey;
             handle.onmousedown = (e) => {
@@ -621,6 +638,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // 特殊控件事件（日期、月数、地址、支出、收入公式等）
     function bindSpecialEvents() {
         // 日期输入变化
         $$('.date-input').forEach(input => {
@@ -675,6 +693,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 handleCellChange(input);
             };
         });
+
         $$('.months-input').forEach(input => {
             input.onchange = function() {
                 handleCellChange(this);
@@ -713,7 +732,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 地址打开按钮
+        // 地址打开按钮（拼接后缀）
         $$('.open-link').forEach(btn => {
             btn.onclick = function() {
                 const address = this.dataset.address;
@@ -761,7 +780,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 收入输入框（公式）
+        // 收入输入框（支持公式）
         $$('.fee-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
@@ -777,6 +796,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // 通用单元格变化处理
     function handleCellChange(input) {
         const colKey = input.dataset.col;
         const id = parseInt(input.dataset.id);
@@ -837,7 +857,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 添加行 ---
+    // 添加行
     async function addRow() {
         if (!state.currentTabId) return;
         try {
@@ -865,7 +885,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 添加失败: ' + err.message); }
     }
 
-    // --- 删除选中 ---
+    // 删除选中
     async function deleteSelected() {
         const ids = Array.from(state.selectedRows);
         if (ids.length === 0) { setStatus('⚠️ 请选择行'); return; }
@@ -880,7 +900,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // --- 导出/导入 ---
+    // 导出/导入
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -1004,6 +1024,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         columnList.innerHTML = html;
 
+        // 拖拽
         const items = columnList.querySelectorAll('.column-item');
         items.forEach(item => {
             item.addEventListener('dragstart', function(e) {
@@ -1052,6 +1073,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
+        // 收入/支出标记切换
         columnList.querySelectorAll('.income-toggle').forEach(btn => {
             btn.addEventListener('click', async function() {
                 const id = parseInt(this.dataset.id);
@@ -1210,7 +1232,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.post('/auth/change-password', { oldPassword: oldPwd, newPassword: newPwd });
             changePwdStatus.textContent = '✅ 密码修改成功';
             oldPwdInput.value = ''; newPwdInput.value = ''; confirmPwdInput.value = '';
-        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message); }
+        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
     }
 
     // --- 注册开关 ---
@@ -1231,7 +1253,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 后缀设置 ---
+    // --- 地址后缀设置 ---
     async function loadSuffixSettings() {
         try {
             const ipSuffix = await API.get('/settings/ip_port_suffix');
@@ -1295,11 +1317,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + (data.error || '');
             }
         } catch (err) {
-            document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + err.message);
+            document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + err.message;
         }
     }
 
-    // --- 加载设置 ---
+    // --- 加载所有设置 ---
     async function loadSettings() {
         try {
             const cert = await API.get('/settings/cert_path');
