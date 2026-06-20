@@ -39,7 +39,7 @@ body {
 .nav-btn:hover { background: rgba(255,255,255,0.2); }
 #currentTimeDisplay { font-size:14px; opacity:0.8; }
 
-/* 顶部水平菜单（取代原侧边栏） */
+/* 顶部水平菜单 */
 .top-menu {
     background: #fff;
     border-bottom: 1px solid #e4e7ed;
@@ -78,7 +78,7 @@ body {
 }
 .top-menu .menu-item span:first-child { font-size:18px; }
 
-/* 主体布局：全宽，不再有侧边栏 */
+/* 主体布局 */
 .main-body {
     display: flex;
     flex: 1;
@@ -202,26 +202,26 @@ body {
 }
 #dataTable th {
     background: #f5f7fa;
-    padding: 6px 8px;
+    padding: 4px 6px;
     text-align: center;
     font-weight: 600;
     color: #333;
     border-bottom: 2px solid #e4e7ed;
     user-select: none;
-    white-space: nowrap;
+    white-space: normal;      /* 允许换行 */
     position: relative;
-    min-width: 80px;
+    min-width: 60px;
 }
 .th-inner {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 2px;
 }
 .th-inner .col-name {
-    flex: 0 1 auto;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.3;
+    text-align: center;
 }
 .th-inner .col-dropdown-btn {
     background: transparent;
@@ -230,6 +230,7 @@ body {
     font-size: 14px;
     color: #999;
     padding: 0 4px;
+    margin-top: 2px;
 }
 .th-inner .col-dropdown-btn:hover { color:#333; }
 .col-dropdown-btn.filter-active {
@@ -315,7 +316,7 @@ body {
 
 /* 单元格样式 */
 #dataTable td {
-    padding: 6px 10px;
+    padding: 4px 6px;
     border-bottom: 1px solid #ebeef5;
     vertical-align: middle;
     text-align: center;
@@ -353,33 +354,47 @@ body {
     cursor: pointer;
 }
 
-/* 特殊控件：月数 - 隐藏自带微调按钮，收紧按钮间距 */
+/* 月数控件（紧凑型） */
 .months-control {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 2px;           /* 原为 3px，缩小间距使按钮更聚拢 */
+    gap: 0;                    /* 无间距，按钮紧贴输入框 */
 }
 .months-control button {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border: 1px solid #dcdfe6;
-    border-radius: 4px;
     background: #fff;
     cursor: pointer;
     font-size: 14px;
     line-height: 1;
-    padding: 0;         /* 去掉内边距，让文字居中 */
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0;
+}
+.months-control button:first-child {
+    border-right: none;
+    border-radius: 4px 0 0 4px;
+}
+.months-control button:last-child {
+    border-left: none;
+    border-radius: 0 4px 4px 0;
 }
 .months-control button:hover { background:#f0f2f5; }
 .months-control input {
-    width: 40px;
+    width: 30px;
     text-align: center;
     border: 1px solid #dcdfe6;
-    border-radius: 4px;
+    border-radius: 0;
     padding: 2px 0;
+    font-size: 13px;
+    outline: none;
+    height: 20px;
 }
-/* 移除数字输入框原生的上下箭头 */
+/* 移除数字输入框原生箭头 */
 .months-control input[type="number"]::-webkit-outer-spin-button,
 .months-control input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -389,7 +404,17 @@ body {
     -moz-appearance: textfield;
 }
 
-/* 特殊控件：地址 */
+/* 支出列隐藏微调按钮 */
+.expense-input[type="number"]::-webkit-outer-spin-button,
+.expense-input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.expense-input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+/* 地址控件 */
 .address-control {
     display: flex;
     align-items: center;
@@ -414,7 +439,7 @@ body {
 }
 .address-control .open-link:hover { background:#3a5cd7; }
 
-/* 日期控件（无快捷按钮） */
+/* 日期控件 */
 .date-control {
     display: inline-block;
     text-align: center;
@@ -425,15 +450,6 @@ body {
     border-radius: 4px;
     font-size: 13px;
     text-align: center;
-}
-
-/* 支出列显示 */
-.expense-input {
-    width: 60px !important;
-}
-/* 收入列显示 */
-.fee-input {
-    width: 100% !important;
 }
 
 /* 状态栏 */
@@ -692,12 +708,11 @@ body {
 }
 #bgFileInput { display:none; }
 
-/* 地址后缀设置 */
+/* 地址后缀弹窗内样式 */
 .suffix-setting {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    max-width: 400px;
 }
 .suffix-setting .input-group {
     display: flex;
