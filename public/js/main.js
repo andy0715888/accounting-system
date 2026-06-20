@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.ceil(ctx.measureText(text).width);
     }
 
-    // 获取单元格的“显示文本”（用于筛选和列宽内容计算）
+    // 获取单元格的“显示文本”
     function getDisplayValue(record, col) {
         if (!record || !col) return '';
         const colKey = col.col_key;
@@ -142,21 +142,14 @@ document.addEventListener('DOMContentLoaded', function() {
             return days !== '' ? days + ' 天' : '';
         } else if (colKey === 'is_expired') {
             return checkExpired(record.data.host_expire);
-        } else if (colKey === 'expense') {
-            // 支出列：显示为“单价 → 总价”
-            const months = parseInt(record.data.months) || 0;
-            const unitPrice = parseFloat(val) || 0;
-            const total = unitPrice * months;
-            return `${unitPrice} → ${total.toFixed(2)}`;
         } else {
             return val === null || val === undefined ? '' : String(val);
         }
     }
 
-    // 根据列定义和所有记录计算最佳列宽（支出列考虑完整显示）
+    // 计算列宽（针对可能换行的表头，取两行中较宽的一行）
     function calcColumnWidth(col) {
-        // 先算表头
-        let headerText = getColumnDisplayName(col);
+        let headerText = getColumnDisplayName(col); // 可能包含 <br>，需要提取纯文本
         let lines = headerText.split('<br>');
         let maxHeaderWidth = 0;
         lines.forEach(line => {
@@ -172,19 +165,22 @@ document.addEventListener('DOMContentLoaded', function() {
             const w = measureTextWidth(displayVal, 400, 14) + 16;
             if (w > maxCellWidth) maxCellWidth = w;
         });
-        return Math.max(60, Math.min(400, Math.max(maxHeaderWidth, maxCellWidth)));
+        return Math.max(60, Math.min(350, Math.max(maxHeaderWidth, maxCellWidth)));
     }
 
-    // 返回换行的列名 HTML
+    // 返回换行的列名 HTML（内部处理特定列）
     function getColumnDisplayName(col) {
         const key = col.col_key;
+        const name = col.col_name;
+        // 主机相关列拆分
         if (key === 'host_purchase') return '主机<br>购买时间';
         if (key === 'host_expire') return '主机<br>到期时间';
         if (key === 'host_remaining') return '主机<br>剩余天数';
+        // 客户相关列拆分
         if (key === 'client_purchase') return '客户<br>购买时间';
         if (key === 'client_expire') return '客户<br>到期时间';
         if (key === 'client_remaining') return '客户<br>剩余天数';
-        return col.col_name;
+        return name;
     }
 
     function computeDaysRemaining(dateStr) {
@@ -528,7 +524,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const displayValue = unitPrice * months;
                     inputHtml = `
                         <input type="number" step="0.01" class="cell-input expense-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${unitPrice}" />
-                        <span style="margin-left:4px;font-weight:bold;white-space:nowrap;">→ ${displayValue.toFixed(2)}</span>
+                        <span style="margin-left:4px;font-weight:bold;">→ ${displayValue.toFixed(2)}</span>
                     `;
                 } else if (colKey === 'fee') {
                     inputHtml = `
@@ -1344,7 +1340,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.post('/auth/change-password', { oldPassword: oldPwd, newPassword: newPwd });
             changePwdStatus.textContent = '✅ 密码修改成功';
             oldPwdInput.value = ''; newPwdInput.value = ''; confirmPwdInput.value = '';
-        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message); }
+        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
     }
 
     // --- 注册开关 ---
@@ -1470,6 +1466,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try { await API.post('/auth/logout'); window.location.href = '/login'; } catch (err) { setStatus('❌ 退出失败: ' + err.message); }
     });
 
+    // 地址后缀按钮
     addressSuffixBtn.addEventListener('click', function() {
         addressSuffixModal.classList.add('show');
     });
