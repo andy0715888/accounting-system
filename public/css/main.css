@@ -353,12 +353,12 @@ body {
     cursor: pointer;
 }
 
-/* 特殊控件：月数 */
+/* 特殊控件：月数 - 隐藏自带微调按钮，收紧按钮间距 */
 .months-control {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 2px;           /* 原为 3px，缩小间距使按钮更聚拢 */
 }
 .months-control button {
     width: 22px;
@@ -369,6 +369,7 @@ body {
     cursor: pointer;
     font-size: 14px;
     line-height: 1;
+    padding: 0;         /* 去掉内边距，让文字居中 */
 }
 .months-control button:hover { background:#f0f2f5; }
 .months-control input {
@@ -377,6 +378,15 @@ body {
     border: 1px solid #dcdfe6;
     border-radius: 4px;
     padding: 2px 0;
+}
+/* 移除数字输入框原生的上下箭头 */
+.months-control input[type="number"]::-webkit-outer-spin-button,
+.months-control input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.months-control input[type="number"] {
+    -moz-appearance: textfield;
 }
 
 /* 特殊控件：地址 */
