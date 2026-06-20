@@ -8,8 +8,8 @@ document.addEventListener('DOMContentLoaded', function() {
         columns: [],
         records: [],
         selectedRows: new Set(),
-        filters: {},                // { colKey: [selectedDisplayValue1, ...] }
-        filterOptions: {},          // 用于缓存每列所有可选值
+        filters: {},
+        filterOptions: {},
         isLoaded: false,
         userName: '',
         isAdmin: false,
@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const exportBtn = $('#exportBtn');
     const refreshBtn = $('#refreshBtn');
     const manageColumnsBtn = $('#manageColumnsBtn');
+    const addressSuffixBtn = $('#addressSuffixBtn');
     const logoutBtn = $('#logoutBtn');
     const columnModal = $('#columnModal');
     const closeColumnModal = $('#closeColumnModal');
@@ -58,7 +59,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const registerSwitchStatus = $('#registerSwitchStatus');
     const registerSwitchGroup = $('#registerSwitchGroup');
 
-    // 地址后缀设置 DOM
+    // 地址后缀弹窗相关
+    const addressSuffixModal = $('#addressSuffixModal');
+    const closeAddressSuffixModal = $('#closeAddressSuffixModal');
     const ipPortSuffixInput = $('#ipPortSuffixInput');
     const domainPortSuffixInput = $('#domainPortSuffixInput');
     const saveSuffixBtn = $('#saveSuffixBtn');
@@ -105,7 +108,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     function getCellValue(record, colKey) { return record.data[colKey] ?? ''; }
 
-    // 安全转义
     function escapeHtml(value) {
         return String(value ?? '')
             .replace(/&/g, '&amp;')
@@ -127,7 +129,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.ceil(ctx.measureText(text).width);
     }
 
-    // 获取单元格的“显示文本”（用于筛选和列宽内容计算）
+    // 获取单元格的“显示文本”
     function getDisplayValue(record, col) {
         if (!record || !col) return '';
         const colKey = col.col_key;
@@ -145,24 +147,42 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 根据列定义和所有记录计算最佳列宽
+    // 计算列宽（针对可能换行的表头，取两行中较宽的一行）
     function calcColumnWidth(col) {
-        // 先算表头
-        let maxWidth = measureTextWidth(col.col_name) + 22; // 下拉按钮宽度
-        if (col.is_income === 1 || col.is_income === 2) maxWidth += 20; // 收支图标
-        maxWidth += 8; // padding
+        let headerText = getColumnDisplayName(col); // 可能包含 <br>，需要提取纯文本
+        let lines = headerText.split('<br>');
+        let maxHeaderWidth = 0;
+        lines.forEach(line => {
+            const w = measureTextWidth(line) + 22;
+            if (w > maxHeaderWidth) maxHeaderWidth = w;
+        });
+        if (col.is_income === 1 || col.is_income === 2) maxHeaderWidth += 20;
+        maxHeaderWidth += 8;
 
-        // 遍历记录取最大值
+        let maxCellWidth = 0;
         state.records.forEach(record => {
             const displayVal = getDisplayValue(record, col);
-            // 忽略空值，但保留长度计算
-            const w = measureTextWidth(displayVal, 400, 14) + 16; // 单元格内边距
-            if (w > maxWidth) maxWidth = w;
+            const w = measureTextWidth(displayVal, 400, 14) + 16;
+            if (w > maxCellWidth) maxCellWidth = w;
         });
-        return Math.max(60, Math.min(350, maxWidth));
+        return Math.max(60, Math.min(350, Math.max(maxHeaderWidth, maxCellWidth)));
     }
 
-    // 计算剩余天数
+    // 返回换行的列名 HTML（内部处理特定列）
+    function getColumnDisplayName(col) {
+        const key = col.col_key;
+        const name = col.col_name;
+        // 主机相关列拆分
+        if (key === 'host_purchase') return '主机<br>购买时间';
+        if (key === 'host_expire') return '主机<br>到期时间';
+        if (key === 'host_remaining') return '主机<br>剩余天数';
+        // 客户相关列拆分
+        if (key === 'client_purchase') return '客户<br>购买时间';
+        if (key === 'client_expire') return '客户<br>到期时间';
+        if (key === 'client_remaining') return '客户<br>剩余天数';
+        return name;
+    }
+
     function computeDaysRemaining(dateStr) {
         if (!dateStr) return '';
         const target = new Date(dateStr);
@@ -245,7 +265,6 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadRecords(tabId) {
         const records = await API.get('/records?tabId=' + tabId);
         state.records = records;
-        // 更新每列的筛选项（显示值）
         state.columns.forEach(col => {
             const values = new Set();
             state.records.forEach(r => {
@@ -362,18 +381,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (value === null || value === undefined || String(value).trim() === '') return '(空白)';
         return String(value).trim();
     }
-
     function isFilterActive(colKey) {
         return state.filters.hasOwnProperty(colKey);
     }
-
     function recordMatchesFilter(record, colKey, selectedValues) {
         const col = state.columns.find(c => c.col_key === colKey);
         if (!col) return true;
         const displayVal = normalizeFilterValue(getDisplayValue(record, col));
         return selectedValues.includes(displayVal);
     }
-
     function getFilteredRecords() {
         return state.records.filter(record => {
             for (const [colKey, selectedValues] of Object.entries(state.filters)) {
@@ -399,11 +415,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const hasFilter = isFilterActive(col.col_key) ? 'filter-active' : '';
             const savedWidth = col.col_width;
             const width = (savedWidth && savedWidth !== 150) ? savedWidth : calcColumnWidth(col);
+            const displayName = getColumnDisplayName(col);
 
             theadHtml += `
                 <th data-col="${escapeAttr(col.col_key)}" style="width:${width}px;min-width:${width}px;max-width:${width}px;">
                     <div class="th-inner">
-                        <span class="col-name">${escapeHtml(col.col_name)} ${incomeLabel}</span>
+                        <span class="col-name">${displayName} ${incomeLabel}</span>
                         <button class="col-dropdown-btn ${hasFilter}" data-col="${escapeAttr(col.col_key)}">▼</button>
                     </div>
                     <div class="col-dropdown-panel" data-col="${escapeAttr(col.col_key)}">
@@ -438,7 +455,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (filteredRecords.length === 0) {
             tableBody.innerHTML = `<tr><td colspan="${visibleColumns.length + 1}" style="text-align:center;padding:40px 0;color:#999;">📭 暂无数据</td></tr>`;
             recordCount.textContent = Object.keys(state.filters).length > 0 ? `共 0 / 全部 ${state.records.length} 条记录` : `共 0 条记录`;
-            bindFilterEvents(); // 即使没有数据也要绑定筛选事件，否则无法清除筛选
+            bindFilterEvents();
             return;
         }
 
@@ -477,7 +494,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     inputHtml = `
                         <div class="months-control">
                             <button class="months-dec" data-col="${escapeAttr(colKey)}" data-id="${record.id}">-</button>
-                            <input type="number" class="cell-input months-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${num}" min="0" step="1" style="width:60px;text-align:center;" />
+                            <input type="number" class="cell-input months-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${num}" min="0" step="1" />
                             <button class="months-inc" data-col="${escapeAttr(colKey)}" data-id="${record.id}">+</button>
                         </div>
                     `;
@@ -506,12 +523,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     const unitPrice = parseFloat(val) || 0;
                     const displayValue = unitPrice * months;
                     inputHtml = `
-                        <input type="number" step="0.01" class="cell-input expense-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${unitPrice}" style="width:60px;" />
+                        <input type="number" step="0.01" class="cell-input expense-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${unitPrice}" />
                         <span style="margin-left:4px;font-weight:bold;">→ ${displayValue.toFixed(2)}</span>
                     `;
                 } else if (colKey === 'fee') {
                     inputHtml = `
-                        <input type="text" class="cell-input fee-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(val)}" style="width:100%;" />
+                        <input type="text" class="cell-input fee-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(val)}" />
                     `;
                 } else {
                     const inputType = col.col_type === 'number' ? 'number' : 'text';
@@ -550,7 +567,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 筛选面板操作函数（复用）---
+    // --- 筛选面板操作函数 ---
     function closeFilterPanels() {
         $$('.col-dropdown-panel.show').forEach(panel => panel.classList.remove('show'));
     }
@@ -997,7 +1014,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // 导出/导入（保持原有逻辑，无改动）
+    // 导出/导入
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -1344,7 +1361,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 地址后缀 ---
+    // --- 地址后缀（独立弹窗） ---
     async function loadSuffixSettings() {
         try {
             const ipSuffix = await API.get('/settings/ip_port_suffix');
@@ -1448,6 +1465,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!confirm('确定退出吗？')) return;
         try { await API.post('/auth/logout'); window.location.href = '/login'; } catch (err) { setStatus('❌ 退出失败: ' + err.message); }
     });
+
+    // 地址后缀按钮
+    addressSuffixBtn.addEventListener('click', function() {
+        addressSuffixModal.classList.add('show');
+    });
+    closeAddressSuffixModal.addEventListener('click', () => addressSuffixModal.classList.remove('show'));
 
     closeColumnModal.addEventListener('click', () => columnModal.classList.remove('show'));
     if (addColBtn) addColBtn.addEventListener('click', addColumn);
