@@ -22,7 +22,7 @@
         </div>
     </header>
 
-    <!-- 顶部菜单栏（原侧边栏移至此处） -->
+    <!-- 顶部菜单栏 -->
     <nav class="top-menu">
         <ul class="menu">
             <li class="menu-item active" data-view="table"><span>📋</span> 记账表格</li>
@@ -31,19 +31,16 @@
         </ul>
     </nav>
 
-    <!-- 主体（全宽内容区） -->
+    <!-- 主体 -->
     <div class="main-body">
-        <!-- 右侧内容 -->
         <div class="content-area">
             <!-- 表格视图 -->
             <div id="view-table" class="view-panel active">
-                <!-- 标签栏 -->
                 <div class="tab-bar-container">
                     <div class="tab-bar" id="tabBar"></div>
                     <button class="add-tab-btn" id="addTabBtn">➕</button>
                 </div>
 
-                <!-- 工具栏 -->
                 <div class="tab-toolbar">
                     <div class="toolbar-left">
                         <button class="tool-btn primary" id="addRowBtn">➕ 添加行</button>
@@ -55,13 +52,13 @@
                         <button class="tool-btn" id="refreshBtn">🔄 刷新</button>
                         <span class="tool-divider"></span>
                         <button class="tool-btn" id="manageColumnsBtn">📋 列管理</button>
+                        <button class="tool-btn" id="addressSuffixBtn">🔗 地址后缀</button>
                     </div>
                     <div class="toolbar-right">
                         <span class="record-count" id="recordCount">共 0 条记录</span>
                     </div>
                 </div>
 
-                <!-- 表格 -->
                 <div class="table-container">
                     <div class="table-wrapper" id="tableWrapper">
                         <table id="dataTable">
@@ -82,7 +79,6 @@
             <div id="view-settings" class="view-panel">
                 <h2>⚙️ 系统设置</h2>
                 <div class="settings-container">
-                    <!-- 注册开关 -->
                     <div class="setting-group" id="registerSwitchGroup" style="display:none;">
                         <h3>🔓 注册管理</h3>
                         <p class="setting-desc">关闭后，新用户无法注册</p>
@@ -93,7 +89,6 @@
                         <span id="registerSwitchStatus"></span>
                     </div>
 
-                    <!-- 修改密码 -->
                     <div class="setting-group">
                         <h3>🔐 修改密码</h3>
                         <div class="password-form">
@@ -114,7 +109,6 @@
                         </div>
                     </div>
 
-                    <!-- HTTPS 证书 -->
                     <div class="setting-group">
                         <h3>🔐 HTTPS 证书</h3>
                         <p class="setting-desc">设置证书路径后，重启服务将启用 HTTPS</p>
@@ -132,7 +126,6 @@
                         </div>
                     </div>
 
-                    <!-- 背景设置 -->
                     <div class="setting-group">
                         <h3>🖼️ 登录背景</h3>
                         <p class="setting-desc">支持 HTTPS 图片链接或上传本地图片</p>
@@ -150,25 +143,6 @@
                         </div>
                     </div>
 
-                    <!-- 地址后缀设置 -->
-                    <div class="setting-group">
-                        <h3>🔗 地址端口后缀</h3>
-                        <p class="setting-desc">设置后，点击"打开"时自动拼接后缀</p>
-                        <div class="suffix-setting">
-                            <div class="input-group">
-                                <label>IP地址后缀 (如 :666)</label>
-                                <input type="text" id="ipPortSuffixInput" placeholder=":666" />
-                            </div>
-                            <div class="input-group">
-                                <label>域名后缀 (如 :666/666)</label>
-                                <input type="text" id="domainPortSuffixInput" placeholder=":666/666" />
-                            </div>
-                            <button class="tool-btn primary" id="saveSuffixBtn">保存后缀设置</button>
-                            <span id="suffixStatus"></span>
-                        </div>
-                    </div>
-
-                    <!-- 网站图标 -->
                     <div class="setting-group">
                         <h3>🖼️ 网站图标 (Favicon)</h3>
                         <p class="setting-desc">上传 .ico 或 .png 图片，刷新浏览器后生效</p>
@@ -225,6 +199,30 @@
                     <button class="tool-btn" id="cancelImport">取消</button>
                 </div>
                 <div id="importStatus"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 地址后缀弹窗 -->
+    <div class="modal-overlay" id="addressSuffixModal">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h2>🔗 地址后缀</h2>
+                <button class="modal-close" id="closeAddressSuffixModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="suffix-setting">
+                    <div class="input-group">
+                        <label>IP地址后缀 (如 :666)</label>
+                        <input type="text" id="ipPortSuffixInput" placeholder=":666" />
+                    </div>
+                    <div class="input-group">
+                        <label>域名后缀 (如 :666/666)</label>
+                        <input type="text" id="domainPortSuffixInput" placeholder=":666/666" />
+                    </div>
+                    <button class="tool-btn primary" id="saveSuffixBtn">保存后缀设置</button>
+                    <span id="suffixStatus"></span>
+                </div>
             </div>
         </div>
     </div>
