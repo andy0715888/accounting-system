@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const registerSwitchStatus = $('#registerSwitchStatus');
     const registerSwitchGroup = $('#registerSwitchGroup');
 
-    // 地址后缀弹窗
+    // 地址后缀弹窗相关
     const addressSuffixModal = $('#addressSuffixModal');
     const closeAddressSuffixModal = $('#closeAddressSuffixModal');
     const ipPortSuffixInput = $('#ipPortSuffixInput');
@@ -67,6 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveSuffixBtn = $('#saveSuffixBtn');
     const suffixStatus = $('#suffixStatus');
 
+    // 用于全局只绑定一次点击关闭筛选面板
     let filterDocumentClickBound = false;
 
     // --- 菜单切换 ---
@@ -120,6 +121,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return String(url ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     }
 
+    // 文本测量（用于列宽计算）
     function measureTextWidth(text, fontWeight = 600, fontSize = 14) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -127,6 +129,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.ceil(ctx.measureText(text).width);
     }
 
+    // 获取单元格的“显示文本”
     function getDisplayValue(record, col) {
         if (!record || !col) return '';
         const colKey = col.col_key;
@@ -144,13 +147,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // ===== 修改1：calcColumnWidth 加入支出列完整显示宽度计算 =====
+    // 计算列宽（针对支出列特殊处理，确保结果可见）
     function calcColumnWidth(col) {
         let headerText = getColumnDisplayName(col);
         let lines = headerText.split('<br>');
         let maxHeaderWidth = 0;
         lines.forEach(line => {
-            const w = measureTextWidth(line) + 22;
+            const w = measureTextWidth(line) + 22; // 下拉按钮宽度
             if (w > maxHeaderWidth) maxHeaderWidth = w;
         });
         if (col.is_income === 1 || col.is_income === 2) maxHeaderWidth += 20;
@@ -158,28 +161,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
         let maxCellWidth = 0;
         state.records.forEach(record => {
-            let displayVal;
-            // 支出列：模拟完整显示“单价 → 总额”
+            const displayVal = getDisplayValue(record, col);
+            let w = measureTextWidth(displayVal, 400, 14) + 16;
             if (col.col_key === 'expense') {
-                const unitPrice = parseFloat(record.data.expense) || 0;
+                // 支出列：输入框(60px) + 间距(4px) + "→ " + 计算结果
                 const months = parseInt(record.data.months) || 0;
-                const total = unitPrice * months;
-                displayVal = `${unitPrice} → ${total.toFixed(2)}`;
-            } else {
-                displayVal = getDisplayValue(record, col);
+                const unitPrice = parseFloat(record.data[col.col_key]) || 0;
+                const result = (unitPrice * months).toFixed(2);
+                const text = '→ ' + result;
+                w = 60 + 4 + measureTextWidth(text, 600, 14) + 8;
             }
-            const w = measureTextWidth(displayVal, 400, 14) + 16;
             if (w > maxCellWidth) maxCellWidth = w;
         });
-        return Math.max(60, Math.min(350, Math.max(maxHeaderWidth, maxCellWidth)));
+        return Math.max(60, Math.min(400, Math.max(maxHeaderWidth, maxCellWidth))); // 适当放宽最大宽度
     }
 
+    // 返回换行的列名 HTML（内部处理特定列）
     function getColumnDisplayName(col) {
         const key = col.col_key;
         const name = col.col_name;
+        // 主机相关列拆分
         if (key === 'host_purchase') return '主机<br>购买时间';
         if (key === 'host_expire') return '主机<br>到期时间';
         if (key === 'host_remaining') return '主机<br>剩余天数';
+        // 客户相关列拆分
         if (key === 'client_purchase') return '客户<br>购买时间';
         if (key === 'client_expire') return '客户<br>到期时间';
         if (key === 'client_remaining') return '客户<br>剩余天数';
@@ -408,6 +413,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
         const filteredRecords = getFilteredRecords();
 
+        // 表头
         let theadHtml = `<tr><th style="width:36px;min-width:36px;max-width:36px;text-align:center;"><input type="checkbox" id="selectAll" /></th>`;
         visibleColumns.forEach(col => {
             const isIncome = col.is_income || 0;
@@ -453,6 +459,7 @@ document.addEventListener('DOMContentLoaded', function() {
         theadHtml += '</tr>';
         tableHead.innerHTML = theadHtml;
 
+        // 表体
         if (filteredRecords.length === 0) {
             tableBody.innerHTML = `<tr><td colspan="${visibleColumns.length + 1}" style="text-align:center;padding:40px 0;color:#999;">📭 暂无数据</td></tr>`;
             recordCount.textContent = Object.keys(state.filters).length > 0 ? `共 0 / 全部 ${state.records.length} 条记录` : `共 0 条记录`;
@@ -469,6 +476,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const colKey = col.col_key;
                 let val = getCellValue(record, colKey);
                 let inputHtml = '';
+                // 对于支出列，给 td 添加特殊样式，防止结果被截断
+                let tdStyle = colKey === 'expense' ? ' style="overflow:visible; white-space:nowrap;"' : '';
 
                 if (col.col_type === 'days_remaining') {
                     let dateKey = '';
@@ -523,22 +532,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     const months = parseInt(record.data.months) || 0;
                     const unitPrice = parseFloat(val) || 0;
                     const displayValue = unitPrice * months;
-                    // ===== 修改2：支出列 td 增加 nowrap 内联样式，强制不换行 =====
                     inputHtml = `
-                        <td style="white-space:nowrap;">
-                            <input type="number" step="0.01" class="cell-input expense-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${unitPrice}" />
-                            <span style="margin-left:4px;font-weight:bold;">→ ${displayValue.toFixed(2)}</span>
-                        </td>
-                    `;
-                    // 注意：此处直接返回 td 标签，需特殊处理
-                    // 实际上不能在这里返回 td，因为外层已经有 td 了，需要重构
-                    // 这里保持之前结构，只改变 td 的样式
-                    // 修正：在外面 td 上加 style，这里只输出内容
-                    tbodyHtml += `<td style="white-space:nowrap;">
                         <input type="number" step="0.01" class="cell-input expense-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${unitPrice}" />
                         <span style="margin-left:4px;font-weight:bold;">→ ${displayValue.toFixed(2)}</span>
-                    </td>`;
-                    return; // 跳过后续统一添加 td 的逻辑
+                    `;
                 } else if (colKey === 'fee') {
                     inputHtml = `
                         <input type="text" class="cell-input fee-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(val)}" />
@@ -548,8 +545,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const step = col.col_type === 'number' ? 'step="0.01"' : '';
                     inputHtml = `<input type="${inputType}" class="cell-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(val || '')}" ${step} />`;
                 }
-                // 对于非 expense 列，正常添加 td
-                tbodyHtml += `<td>${inputHtml}</td>`;
+                tbodyHtml += `<td${tdStyle}>${inputHtml}</td>`;
             });
             tbodyHtml += '</tr>';
         });
@@ -1480,6 +1476,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try { await API.post('/auth/logout'); window.location.href = '/login'; } catch (err) { setStatus('❌ 退出失败: ' + err.message); }
     });
 
+    // 地址后缀按钮
     addressSuffixBtn.addEventListener('click', function() {
         addressSuffixModal.classList.add('show');
     });
