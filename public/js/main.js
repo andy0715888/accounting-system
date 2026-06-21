@@ -139,9 +139,24 @@ document.addEventListener('DOMContentLoaded', function() {
             return days !== '' ? days + ' 天' : '';
         } else if (colKey === 'is_expired') {
             return checkExpired(record.data.host_expire);
+        } else if (colKey === 'fee') {
+            const result = computeFeeValue(val);
+            return result !== null ? String(result) : (val || '');
         } else {
             return val === null || val === undefined ? '' : String(val);
         }
+    }
+
+    function computeFeeValue(raw) {
+        if (!raw && raw !== 0) return '';
+        const str = String(raw).trim();
+        if (str.startsWith('=')) {
+            const res = evalExpression(str);
+            if (typeof res === 'number' && !isNaN(res)) return res;
+            return raw;
+        }
+        const num = parseFloat(str);
+        return isNaN(num) ? raw : num;
     }
 
     function calcColumnWidth(col) {
@@ -165,15 +180,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const result = Math.round(unitPrice * months);
                 const text = '→ ' + result;
                 w = 45 + 4 + measureTextWidth(text, 600, 13) + 8;
-            }
-            if (col.col_key === 'fee') {
-                // 收入列可能显示公式计算结果
-                const rawVal = getCellValue(record, 'fee');
-                if (rawVal && rawVal.startsWith('=')) {
-                    const result = evalExpression(rawVal);
-                    const text = '→ ' + result;
-                    w = 80 + 4 + measureTextWidth(text, 600, 13) + 8;
-                }
             }
             if (w > maxCellWidth) maxCellWidth = w;
         });
@@ -234,19 +240,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (typeof result === 'number' && !isNaN(result)) return result;
             return expr;
         } catch (e) { return expr; }
-    }
-
-    // 计算收入结果（用于显示）
-    function calcFeeResult(rawVal) {
-        if (!rawVal) return '';
-        if (rawVal.startsWith('=')) {
-            const result = evalExpression(rawVal);
-            if (typeof result === 'number') return result;
-        } else {
-            const num = parseFloat(rawVal);
-            if (!isNaN(num)) return num;
-        }
-        return null;
     }
 
     // --- API ---
@@ -422,7 +415,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
         const filteredRecords = getFilteredRecords();
 
-        // 表头
         let theadHtml = `<tr><th style="width:36px;min-width:36px;max-width:36px;text-align:center;"><input type="checkbox" id="selectAll" /></th>`;
         visibleColumns.forEach(col => {
             const isIncome = col.is_income || 0;
@@ -468,7 +460,6 @@ document.addEventListener('DOMContentLoaded', function() {
         theadHtml += '</tr>';
         tableHead.innerHTML = theadHtml;
 
-        // 表体
         if (filteredRecords.length === 0) {
             tableBody.innerHTML = `<tr><td colspan="${visibleColumns.length + 1}" style="text-align:center;padding:40px 0;color:#999;">📭 暂无数据</td></tr>`;
             recordCount.textContent = Object.keys(state.filters).length > 0 ? `共 0 / 全部 ${state.records.length} 条记录` : `共 0 条记录`;
@@ -545,16 +536,13 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     `;
                 } else if (colKey === 'fee') {
-                    // 收入列：支持公式计算并显示结果
-                    const feeResult = calcFeeResult(val);
-                    let resultHtml = '';
-                    if (feeResult !== null) {
-                        resultHtml = `<span class="fee-result">→ ${feeResult}</span>`;
-                    }
+                    const rawValue = val || '';
+                    const displayVal = computeFeeValue(rawValue);
+                    const displayText = (displayVal !== '' && displayVal !== null && !isNaN(Number(displayVal))) ? Number(displayVal) : (displayVal || '0');
                     inputHtml = `
-                        <div class="fee-inline">
-                            <input type="text" class="cell-input fee-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(val)}" placeholder="=100+90+..." />
-                            ${resultHtml}
+                        <div class="fee-control" data-col="${escapeAttr(colKey)}" data-id="${record.id}">
+                            <span class="fee-display">${escapeHtml(String(displayText))}</span>
+                            <input type="text" class="cell-input fee-input" value="${escapeAttr(rawValue)}" style="display:none;" />
                         </div>
                     `;
                 } else {
@@ -594,7 +582,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 筛选面板 (不变) ---
+    // --- 筛选面板函数 ---
     function closeFilterPanels() {
         $$('.col-dropdown-panel.show').forEach(panel => panel.classList.remove('show'));
     }
@@ -767,7 +755,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (input.tagName === 'SELECT') input.onchange = () => handleCellChange(input);
         });
 
-        // 列宽拖拽
         $$('.col-resize').forEach(handle => {
             let startX, startWidth, colKey;
             handle.onmousedown = (e) => {
@@ -931,20 +918,73 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 收入
+        // 收入（新交互）
+        $$('.fee-display').forEach(display => {
+            display.addEventListener('click', function(e) {
+                const parent = this.parentElement;
+                const input = parent.querySelector('.fee-input');
+                this.style.display = 'none';
+                input.style.display = 'inline-block';
+                input.focus();
+                input.select();
+            });
+        });
+
         $$('.fee-input').forEach(input => {
-            input.onchange = function() {
-                const col = this.dataset.col;
-                const id = parseInt(this.dataset.id);
-                const val = this.value;
+            const finishEditing = () => {
+                const parent = input.closest('.fee-control');
+                const display = parent.querySelector('.fee-display');
+                const colKey = parent.dataset.col;
+                const id = parseInt(parent.dataset.id);
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
-                record.data[col] = val;
+
+                const rawValue = input.value.trim();
+                record.data[colKey] = rawValue;
                 record._updated = true;
+
+                const computed = computeFeeValue(rawValue);
+                const displayText = (computed !== '' && computed !== null && !isNaN(Number(computed))) ? Number(computed) : (computed || '0');
+                display.textContent = String(displayText);
+
+                input.style.display = 'none';
+                display.style.display = 'inline';
+
+                if (record._saveTimeout) clearTimeout(record._saveTimeout);
+                record._saveTimeout = setTimeout(() => saveRecord(record), 300);
+
+                updateFilterOptionsForCol(colKey);
                 renderTable(false);
-                saveRecord(record);
             };
+
+            input.addEventListener('blur', finishEditing);
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    finishEditing();
+                }
+                if (e.key === 'Escape') {
+                    const parent = input.closest('.fee-control');
+                    const display = parent.querySelector('.fee-display');
+                    const id = parseInt(parent.dataset.id);
+                    const record = state.records.find(r => r.id === id);
+                    const raw = record ? (record.data[parent.dataset.col] || '') : '';
+                    input.value = raw;
+                    input.blur();
+                }
+            });
         });
+    }
+
+    function updateFilterOptionsForCol(colKey) {
+        const col = state.columns.find(c => c.col_key === colKey);
+        if (!col) return;
+        const values = new Set();
+        state.records.forEach(r => {
+            const dv = normalizeFilterValue(getDisplayValue(r, col));
+            values.add(dv);
+        });
+        state.filterOptions[colKey] = Array.from(values).sort();
     }
 
     function handleCellChange(input) {
@@ -1294,15 +1334,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const months = parseInt(r.data.months) || 0;
             const unitPrice = parseFloat(r.data.expense) || 0;
             totalExpense += unitPrice * months;
-            const feeVal = r.data.fee || '';
-            let feeNum = 0;
-            if (feeVal.startsWith('=')) {
-                const result = evalExpression(feeVal);
-                if (typeof result === 'number') feeNum = result;
-            } else {
-                feeNum = parseFloat(feeVal) || 0;
-            }
-            totalIncome += feeNum;
+            const feeNum = computeFeeValue(r.data.fee || '');
+            totalIncome += (typeof feeNum === 'number' ? feeNum : (parseFloat(feeNum) || 0));
         });
         const net = totalIncome - totalExpense;
 
@@ -1325,15 +1358,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const months = parseInt(r.data.months) || 0;
                 const unitPrice = parseFloat(r.data.expense) || 0;
                 dayExpense += unitPrice * months;
-                const feeVal = r.data.fee || '';
-                let feeNum = 0;
-                if (feeVal.startsWith('=')) {
-                    const result = evalExpression(feeVal);
-                    if (typeof result === 'number') feeNum = result;
-                } else {
-                    feeNum = parseFloat(feeVal) || 0;
-                }
-                dayIncome += feeNum;
+                const feeNum = computeFeeValue(r.data.fee || '');
+                dayIncome += (typeof feeNum === 'number' ? feeNum : (parseFloat(feeNum) || 0));
             });
             dailyStats.push({ date: dateKey, income: dayIncome, expense: dayExpense, net: dayIncome - dayExpense });
         });
@@ -1356,7 +1382,7 @@ document.addEventListener('DOMContentLoaded', function() {
         statsContainer.innerHTML = html;
     }
 
-    // --- 密码、注册、后缀、图标 (保持不变) ---
+    // --- 密码修改 ---
     async function changePassword() {
         const oldPwd = oldPwdInput.value.trim();
         const newPwd = newPwdInput.value.trim();
@@ -1371,6 +1397,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
     }
 
+    // --- 注册开关 ---
     async function loadRegisterSwitch() {
         try {
             const data = await API.get('/settings/allow_register');
@@ -1388,6 +1415,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // --- 地址后缀 ---
     async function loadSuffixSettings() {
         try {
             const ipSuffix = await API.get('/settings/ip_port_suffix');
@@ -1418,6 +1446,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // --- Favicon ---
     async function uploadFavicon() {
         const fileInput = document.getElementById('faviconFileInput');
         const file = fileInput.files[0];
@@ -1450,6 +1479,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // --- 加载所有设置 ---
     async function loadSettings() {
         try {
             const cert = await API.get('/settings/cert_path');
