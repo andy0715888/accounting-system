@@ -254,7 +254,7 @@ body {
     border-radius: 4px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     padding: 10px;
-    min-width: 160px;
+    min-width: 180px;
     max-height: 300px;
     overflow-y: auto;
     z-index: 100;
@@ -272,22 +272,37 @@ body {
 }
 .filter-input-wrap input:focus { border-color:#4a6cf7; }
 .filter-options {
-    max-height: 120px;
+    max-height: 150px;
     overflow-y: auto;
     border-top: 1px solid #eee;
     padding-top: 6px;
     margin-bottom: 6px;
 }
-.filter-options label {
-    display: block;
+.filter-option-label {
+    display: flex;
+    align-items: center;
     font-size: 13px;
     padding: 2px 0;
     cursor: pointer;
 }
-.filter-options label input { margin-right:6px; }
+.filter-option-label input { margin-right:6px; }
+.filter-option-label .filter-option-text {
+    flex: 1;
+}
+.filter-option-label .filter-count {
+    color: #999;
+    font-size: 12px;
+    margin-left: 6px;
+    white-space: nowrap;
+}
+.filter-select-all {
+    font-weight: 500;
+    margin-bottom: 2px;
+}
 .filter-actions {
     display: flex;
     gap: 6px;
+    justify-content: flex-end;
 }
 .filter-actions button {
     padding: 2px 10px;
@@ -298,6 +313,12 @@ body {
     font-size: 12px;
 }
 .filter-actions button:hover { background:#f5f7fa; }
+.filter-summary {
+    font-size: 12px;
+    color: #999;
+    margin: 4px 0;
+    text-align: right;
+}
 
 /* 列宽拖拽把手 */
 #dataTable th .col-resize {
@@ -431,6 +452,28 @@ body {
 }
 .expense-input[type="number"] {
     -moz-appearance: textfield;
+}
+
+/* 收入列控件 */
+.fee-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.fee-display {
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background 0.15s;
+    min-width: 30px;
+    text-align: center;
+}
+.fee-display:hover {
+    background: #f0f2f5;
+}
+.fee-input {
+    width: 100% !important;
+    min-width: 60px;
 }
 
 /* 地址控件 */
