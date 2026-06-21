@@ -78,7 +78,7 @@ body {
 }
 .top-menu .menu-item span:first-child { font-size:18px; }
 
-/* 主体布局 */
+/* 主体布局：全宽 */
 .main-body {
     display: flex;
     flex: 1;
@@ -208,7 +208,7 @@ body {
     color: #333;
     border-bottom: 2px solid #e4e7ed;
     user-select: none;
-    white-space: normal;      /* 允许换行 */
+    white-space: normal;
     position: relative;
     min-width: 60px;
 }
@@ -359,7 +359,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0;                    /* 无间距，按钮紧贴输入框 */
+    gap: 0;
 }
 .months-control button {
     width: 20px;
