@@ -162,9 +162,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (col.col_key === 'expense') {
                 const months = parseInt(record.data.months) || 0;
                 const unitPrice = parseFloat(record.data[col.col_key]) || 0;
-                const result = Math.round(unitPrice * months); // 取整
+                const result = Math.round(unitPrice * months);
                 const text = '→ ' + result;
                 w = 45 + 4 + measureTextWidth(text, 600, 13) + 8;
+            }
+            if (col.col_key === 'fee') {
+                // 收入列可能显示公式计算结果
+                const rawVal = getCellValue(record, 'fee');
+                if (rawVal && rawVal.startsWith('=')) {
+                    const result = evalExpression(rawVal);
+                    const text = '→ ' + result;
+                    w = 80 + 4 + measureTextWidth(text, 600, 13) + 8;
+                }
             }
             if (w > maxCellWidth) maxCellWidth = w;
         });
@@ -225,6 +234,19 @@ document.addEventListener('DOMContentLoaded', function() {
             if (typeof result === 'number' && !isNaN(result)) return result;
             return expr;
         } catch (e) { return expr; }
+    }
+
+    // 计算收入结果（用于显示）
+    function calcFeeResult(rawVal) {
+        if (!rawVal) return '';
+        if (rawVal.startsWith('=')) {
+            const result = evalExpression(rawVal);
+            if (typeof result === 'number') return result;
+        } else {
+            const num = parseFloat(rawVal);
+            if (!isNaN(num)) return num;
+        }
+        return null;
     }
 
     // --- API ---
@@ -515,7 +537,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (colKey === 'expense') {
                     const months = parseInt(record.data.months) || 0;
                     const unitPrice = parseFloat(val) || 0;
-                    const displayValue = Math.round(unitPrice * months); // 取整，不保留小数
+                    const displayValue = Math.round(unitPrice * months);
                     inputHtml = `
                         <div class="expense-inline">
                             <input type="number" step="0.01" class="cell-input expense-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${unitPrice}" />
@@ -523,8 +545,17 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     `;
                 } else if (colKey === 'fee') {
+                    // 收入列：支持公式计算并显示结果
+                    const feeResult = calcFeeResult(val);
+                    let resultHtml = '';
+                    if (feeResult !== null) {
+                        resultHtml = `<span class="fee-result">→ ${feeResult}</span>`;
+                    }
                     inputHtml = `
-                        <input type="text" class="cell-input fee-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(val)}" />
+                        <div class="fee-inline">
+                            <input type="text" class="cell-input fee-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(val)}" placeholder="=100+90+..." />
+                            ${resultHtml}
+                        </div>
                     `;
                 } else {
                     const inputType = col.col_type === 'number' ? 'number' : 'text';
@@ -985,7 +1016,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data.client_expire = getNextMonth(now).toISOString().split('T')[0];
             data.expense = 0;
             data.fee = '';
-            data.address = 'IP地址';  // 默认选中IP地址
+            data.address = 'IP地址';
 
             const result = await API.post('/records', { tab_id: state.currentTabId, data });
             const newRecord = { id: result.id, data };
@@ -1011,7 +1042,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // 导出/导入 (保持不变)
+    // 导出/导入
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -1101,7 +1132,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.removeChild(link); URL.revokeObjectURL(url);
     }
 
-    // --- 列管理 (不变) ---
+    // --- 列管理 ---
     async function showColumnManager() {
         if (!state.currentTabId) { setStatus('⚠️ 请先选择一个标签'); return; }
         columnModal.classList.add('show');
@@ -1325,7 +1356,7 @@ document.addEventListener('DOMContentLoaded', function() {
         statsContainer.innerHTML = html;
     }
 
-    // --- 密码修改 ---
+    // --- 密码、注册、后缀、图标 (保持不变) ---
     async function changePassword() {
         const oldPwd = oldPwdInput.value.trim();
         const newPwd = newPwdInput.value.trim();
@@ -1340,7 +1371,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
     }
 
-    // --- 注册开关 ---
     async function loadRegisterSwitch() {
         try {
             const data = await API.get('/settings/allow_register');
@@ -1358,7 +1388,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 地址后缀 ---
     async function loadSuffixSettings() {
         try {
             const ipSuffix = await API.get('/settings/ip_port_suffix');
@@ -1389,7 +1418,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- Favicon ---
     async function uploadFavicon() {
         const fileInput = document.getElementById('faviconFileInput');
         const file = fileInput.files[0];
@@ -1422,7 +1450,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 加载所有设置 ---
     async function loadSettings() {
         try {
             const cert = await API.get('/settings/cert_path');
