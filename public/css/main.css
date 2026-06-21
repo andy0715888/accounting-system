@@ -39,7 +39,7 @@ body {
 .nav-btn:hover { background: rgba(255,255,255,0.2); }
 #currentTimeDisplay { font-size:14px; opacity:0.8; }
 
-/* 顶部水平菜单 */
+/* 顶部水平菜单（取代原侧边栏） */
 .top-menu {
     background: #fff;
     border-bottom: 1px solid #e4e7ed;
@@ -78,7 +78,7 @@ body {
 }
 .top-menu .menu-item span:first-child { font-size:18px; }
 
-/* 主体布局 */
+/* 主体布局：全宽，不再有侧边栏 */
 .main-body {
     display: flex;
     flex: 1;
@@ -208,7 +208,7 @@ body {
     color: #333;
     border-bottom: 2px solid #e4e7ed;
     user-select: none;
-    white-space: normal;      /* 允许换行 */
+    white-space: normal;      /* 允许表头换行 */
     position: relative;
     min-width: 60px;
 }
@@ -320,6 +320,8 @@ body {
     border-bottom: 1px solid #ebeef5;
     vertical-align: middle;
     text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 #dataTable td .cell-input {
     width: 100%;
@@ -354,12 +356,12 @@ body {
     cursor: pointer;
 }
 
-/* 月数控件（紧凑型） */
+/* 月数控件（紧凑型，- 数字 +） */
 .months-control {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0;                    /* 无间距，按钮紧贴输入框 */
+    gap: 0;
 }
 .months-control button {
     width: 20px;
@@ -394,7 +396,7 @@ body {
     outline: none;
     height: 20px;
 }
-/* 移除数字输入框原生箭头 */
+/* 隐藏数字输入框原生上下箭头 */
 .months-control input[type="number"]::-webkit-outer-spin-button,
 .months-control input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -404,7 +406,26 @@ body {
     -moz-appearance: textfield;
 }
 
-/* 支出列隐藏微调按钮 */
+/* 支出列内联布局（单价输入框 + 计算结果） */
+.expense-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.expense-input {
+    width: 45px !important;
+}
+.expense-result {
+    font-weight: bold;
+    font-size: 13px;
+    white-space: nowrap;
+}
+/* 隐藏支出输入框微调按钮 */
 .expense-input[type="number"]::-webkit-outer-spin-button,
 .expense-input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
