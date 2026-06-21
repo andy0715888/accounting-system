@@ -478,7 +478,7 @@ body {
     min-width: 60px;
 }
 
-/* 地址控件 - 打开按钮更小 */
+/* 地址控件 */
 .address-control {
     display: flex;
     align-items: center;
@@ -492,8 +492,8 @@ body {
     border-radius: 4px;
 }
 .address-control .open-link {
-    padding: 1px 6px;       /* 更小内边距 */
-    font-size: 11px;        /* 更小字体 */
+    padding: 1px 6px;
+    font-size: 11px;
     line-height: 1.3;
     border: 1px solid #4a6cf7;
     border-radius: 3px;
@@ -504,18 +504,33 @@ body {
 }
 .address-control .open-link:hover { background:#3a5cd7; }
 
-/* 日期控件（极致紧凑） */
+/* 日期控件（极致紧凑，消除右侧图标多余间距） */
 .date-control {
     display: inline-block;
     text-align: center;
 }
 .date-control input[type="date"] {
-    padding: 1px 2px;       /* 更紧凑 */
+    padding: 0 2px 0 2px;        /* 极小的左右内边距 */
     border: 1px solid #dcdfe6;
     border-radius: 4px;
     font-size: 12px;
-    text-align: center;
     line-height: 1.2;
+    height: 20px;
+    text-align: center;
+    color: #333;
+    background: #fff;
+}
+/* 针对Webkit浏览器调整日历图标的大小和间距 */
+.date-control input[type="date"]::-webkit-calendar-picker-indicator {
+    margin: 0;
+    padding: 0;
+    width: 14px;
+    height: 14px;
+    opacity: 0.8;
+}
+/* Firefox */
+.date-control input[type="date"] {
+    -moz-appearance: textfield;
 }
 
 /* 状态栏 */
