@@ -67,7 +67,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveSuffixBtn = $('#saveSuffixBtn');
     const suffixStatus = $('#suffixStatus');
 
-    // 用于全局只绑定一次点击关闭筛选面板
     let filterDocumentClickBound = false;
 
     // --- 菜单切换 ---
@@ -121,7 +120,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return String(url ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     }
 
-    // 文本测量（用于列宽计算）
     function measureTextWidth(text, fontWeight = 600, fontSize = 14) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -129,7 +127,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.ceil(ctx.measureText(text).width);
     }
 
-    // 获取单元格的“显示文本”
     function getDisplayValue(record, col) {
         if (!record || !col) return '';
         const colKey = col.col_key;
@@ -147,13 +144,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 计算列宽（针对支出列特殊处理，确保结果可见）
     function calcColumnWidth(col) {
         let headerText = getColumnDisplayName(col);
         let lines = headerText.split('<br>');
         let maxHeaderWidth = 0;
         lines.forEach(line => {
-            const w = measureTextWidth(line) + 22; // 下拉按钮宽度
+            const w = measureTextWidth(line) + 22;
             if (w > maxHeaderWidth) maxHeaderWidth = w;
         });
         if (col.is_income === 1 || col.is_income === 2) maxHeaderWidth += 20;
@@ -164,31 +160,26 @@ document.addEventListener('DOMContentLoaded', function() {
             const displayVal = getDisplayValue(record, col);
             let w = measureTextWidth(displayVal, 400, 14) + 16;
             if (col.col_key === 'expense') {
-                // 支出列：输入框(60px) + 间距(4px) + "→ " + 计算结果
                 const months = parseInt(record.data.months) || 0;
                 const unitPrice = parseFloat(record.data[col.col_key]) || 0;
                 const result = (unitPrice * months).toFixed(2);
                 const text = '→ ' + result;
-                w = 60 + 4 + measureTextWidth(text, 600, 14) + 8;
+                w = 45 + 4 + measureTextWidth(text, 600, 13) + 8; // 调整输入框宽度到45
             }
             if (w > maxCellWidth) maxCellWidth = w;
         });
-        return Math.max(60, Math.min(400, Math.max(maxHeaderWidth, maxCellWidth))); // 适当放宽最大宽度
+        return Math.max(60, Math.min(400, Math.max(maxHeaderWidth, maxCellWidth)));
     }
 
-    // 返回换行的列名 HTML（内部处理特定列）
     function getColumnDisplayName(col) {
         const key = col.col_key;
-        const name = col.col_name;
-        // 主机相关列拆分
         if (key === 'host_purchase') return '主机<br>购买时间';
         if (key === 'host_expire') return '主机<br>到期时间';
         if (key === 'host_remaining') return '主机<br>剩余天数';
-        // 客户相关列拆分
         if (key === 'client_purchase') return '客户<br>购买时间';
         if (key === 'client_expire') return '客户<br>到期时间';
         if (key === 'client_remaining') return '客户<br>剩余天数';
-        return name;
+        return col.col_name;
     }
 
     function computeDaysRemaining(dateStr) {
@@ -233,9 +224,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = Function('"use strict"; return (' + sanitized + ')')();
             if (typeof result === 'number' && !isNaN(result)) return result;
             return expr;
-        } catch (e) {
-            return expr;
-        }
+        } catch (e) { return expr; }
     }
 
     // --- API ---
@@ -317,9 +306,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (tab) tab.name = newName.trim();
                         renderTabs();
                         setStatus('✅ 标签已重命名');
-                    } catch (err) {
-                        setStatus('❌ 重命名失败: ' + err.message);
-                    }
+                    } catch (err) { setStatus('❌ 重命名失败: ' + err.message); }
                 }
             });
         });
@@ -476,8 +463,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const colKey = col.col_key;
                 let val = getCellValue(record, colKey);
                 let inputHtml = '';
-                // 对于支出列，给 td 添加特殊样式，防止结果被截断
-                let tdStyle = colKey === 'expense' ? ' style="overflow:visible; white-space:nowrap;"' : '';
 
                 if (col.col_type === 'days_remaining') {
                     let dateKey = '';
@@ -493,7 +478,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     inputHtml = `
                         <div class="address-control">
                             <select class="cell-input address-select" data-col="${escapeAttr(colKey)}" data-id="${record.id}">
-                                <option value="">-</option>
                                 ${options}
                             </select>
                             <button class="open-link" data-address="${escapeAttr(addressValue)}">打开</button>
@@ -533,8 +517,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     const unitPrice = parseFloat(val) || 0;
                     const displayValue = unitPrice * months;
                     inputHtml = `
-                        <input type="number" step="0.01" class="cell-input expense-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${unitPrice}" />
-                        <span style="margin-left:4px;font-weight:bold;">→ ${displayValue.toFixed(2)}</span>
+                        <div class="expense-inline">
+                            <input type="number" step="0.01" class="cell-input expense-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${unitPrice}" />
+                            <span class="expense-result">→ ${displayValue.toFixed(2)}</span>
+                        </div>
                     `;
                 } else if (colKey === 'fee') {
                     inputHtml = `
@@ -545,7 +531,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const step = col.col_type === 'number' ? 'step="0.01"' : '';
                     inputHtml = `<input type="${inputType}" class="cell-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(val || '')}" ${step} />`;
                 }
-                tbodyHtml += `<td${tdStyle}>${inputHtml}</td>`;
+                tbodyHtml += `<td>${inputHtml}</td>`;
             });
             tbodyHtml += '</tr>';
         });
@@ -577,7 +563,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 筛选面板操作函数 ---
+    // --- 筛选面板函数 (不变) ---
     function closeFilterPanels() {
         $$('.col-dropdown-panel.show').forEach(panel => panel.classList.remove('show'));
     }
@@ -856,7 +842,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // IP地址变化同步IP信息
+        // IP地址变化
         $$('.cell-input[data-col="ip_address"]').forEach(input => {
             input.onchange = function() {
                 const id = parseInt(this.dataset.id);
@@ -999,6 +985,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data.client_expire = getNextMonth(now).toISOString().split('T')[0];
             data.expense = 0;
             data.fee = '';
+            data.address = 'IP地址';  // 默认选择IP地址
 
             const result = await API.post('/records', { tab_id: state.currentTabId, data });
             const newRecord = { id: result.id, data };
@@ -1024,7 +1011,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // 导出/导入
+    // 导出/导入 (保持不变)
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -1114,7 +1101,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.body.removeChild(link); URL.revokeObjectURL(url);
     }
 
-    // --- 列管理 ---
+    // --- 列管理 (不变) ---
     async function showColumnManager() {
         if (!state.currentTabId) { setStatus('⚠️ 请先选择一个标签'); return; }
         columnModal.classList.add('show');
@@ -1262,7 +1249,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 统计 ---
+    // --- 统计 (不变) ---
     function renderStats() {
         if (!state.currentTabId) return;
         const records = state.records;
@@ -1338,7 +1325,9 @@ document.addEventListener('DOMContentLoaded', function() {
         statsContainer.innerHTML = html;
     }
 
-    // --- 密码修改 ---
+    // --- 密码/注册/后缀/图标 (与之前一致，省略具体代码，实际文件中保留完整) ---
+    // 这里为了简洁，仅示意保留，实际提供完整代码时请使用上一次回复中的函数定义。
+    // 但为了确保可运行，复制上次回复中的相关函数：
     async function changePassword() {
         const oldPwd = oldPwdInput.value.trim();
         const newPwd = newPwdInput.value.trim();
@@ -1353,7 +1342,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
     }
 
-    // --- 注册开关 ---
     async function loadRegisterSwitch() {
         try {
             const data = await API.get('/settings/allow_register');
@@ -1371,7 +1359,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 地址后缀（独立弹窗） ---
     async function loadSuffixSettings() {
         try {
             const ipSuffix = await API.get('/settings/ip_port_suffix');
@@ -1402,7 +1389,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- Favicon ---
     async function uploadFavicon() {
         const fileInput = document.getElementById('faviconFileInput');
         const file = fileInput.files[0];
@@ -1435,7 +1421,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 加载所有设置 ---
     async function loadSettings() {
         try {
             const cert = await API.get('/settings/cert_path');
@@ -1476,7 +1461,6 @@ document.addEventListener('DOMContentLoaded', function() {
         try { await API.post('/auth/logout'); window.location.href = '/login'; } catch (err) { setStatus('❌ 退出失败: ' + err.message); }
     });
 
-    // 地址后缀按钮
     addressSuffixBtn.addEventListener('click', function() {
         addressSuffixModal.classList.add('show');
     });
