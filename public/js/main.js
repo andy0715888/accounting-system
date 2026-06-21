@@ -162,9 +162,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (col.col_key === 'expense') {
                 const months = parseInt(record.data.months) || 0;
                 const unitPrice = parseFloat(record.data[col.col_key]) || 0;
-                const result = (unitPrice * months).toFixed(2);
+                const result = Math.round(unitPrice * months); // 取整
                 const text = '→ ' + result;
-                w = 45 + 4 + measureTextWidth(text, 600, 13) + 8; // 调整输入框宽度到45
+                w = 45 + 4 + measureTextWidth(text, 600, 13) + 8;
             }
             if (w > maxCellWidth) maxCellWidth = w;
         });
@@ -515,11 +515,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (colKey === 'expense') {
                     const months = parseInt(record.data.months) || 0;
                     const unitPrice = parseFloat(val) || 0;
-                    const displayValue = unitPrice * months;
+                    const displayValue = Math.round(unitPrice * months); // 取整，不保留小数
                     inputHtml = `
                         <div class="expense-inline">
                             <input type="number" step="0.01" class="cell-input expense-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${unitPrice}" />
-                            <span class="expense-result">→ ${displayValue.toFixed(2)}</span>
+                            <span class="expense-result">→ ${displayValue}</span>
                         </div>
                     `;
                 } else if (colKey === 'fee') {
@@ -563,7 +563,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 筛选面板函数 (不变) ---
+    // --- 筛选面板 (不变) ---
     function closeFilterPanels() {
         $$('.col-dropdown-panel.show').forEach(panel => panel.classList.remove('show'));
     }
@@ -985,7 +985,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data.client_expire = getNextMonth(now).toISOString().split('T')[0];
             data.expense = 0;
             data.fee = '';
-            data.address = 'IP地址';  // 默认选择IP地址
+            data.address = 'IP地址';  // 默认选中IP地址
 
             const result = await API.post('/records', { tab_id: state.currentTabId, data });
             const newRecord = { id: result.id, data };
@@ -1249,7 +1249,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 统计 (不变) ---
+    // --- 统计 ---
     function renderStats() {
         if (!state.currentTabId) return;
         const records = state.records;
@@ -1325,9 +1325,7 @@ document.addEventListener('DOMContentLoaded', function() {
         statsContainer.innerHTML = html;
     }
 
-    // --- 密码/注册/后缀/图标 (与之前一致，省略具体代码，实际文件中保留完整) ---
-    // 这里为了简洁，仅示意保留，实际提供完整代码时请使用上一次回复中的函数定义。
-    // 但为了确保可运行，复制上次回复中的相关函数：
+    // --- 密码修改 ---
     async function changePassword() {
         const oldPwd = oldPwdInput.value.trim();
         const newPwd = newPwdInput.value.trim();
@@ -1342,6 +1340,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
     }
 
+    // --- 注册开关 ---
     async function loadRegisterSwitch() {
         try {
             const data = await API.get('/settings/allow_register');
@@ -1359,6 +1358,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // --- 地址后缀 ---
     async function loadSuffixSettings() {
         try {
             const ipSuffix = await API.get('/settings/ip_port_suffix');
@@ -1389,6 +1389,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // --- Favicon ---
     async function uploadFavicon() {
         const fileInput = document.getElementById('faviconFileInput');
         const file = fileInput.files[0];
@@ -1421,6 +1422,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // --- 加载所有设置 ---
     async function loadSettings() {
         try {
             const cert = await API.get('/settings/cert_path');
