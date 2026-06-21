@@ -67,7 +67,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveSuffixBtn = $('#saveSuffixBtn');
     const suffixStatus = $('#suffixStatus');
 
-    // 用于全局只绑定一次点击关闭筛选面板
     let filterDocumentClickBound = false;
 
     // --- 菜单切换 ---
@@ -121,7 +120,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return String(url ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     }
 
-    // 文本测量（用于列宽计算）
     function measureTextWidth(text, fontWeight = 600, fontSize = 14) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -129,7 +127,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.ceil(ctx.measureText(text).width);
     }
 
-    // 获取单元格的“显示文本”
     function getDisplayValue(record, col) {
         if (!record || !col) return '';
         const colKey = col.col_key;
@@ -147,9 +144,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 计算列宽（针对可能换行的表头，取两行中较宽的一行）
     function calcColumnWidth(col) {
-        let headerText = getColumnDisplayName(col); // 可能包含 <br>，需要提取纯文本
+        let headerText = getColumnDisplayName(col);
         let lines = headerText.split('<br>');
         let maxHeaderWidth = 0;
         lines.forEach(line => {
@@ -168,19 +164,15 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.max(60, Math.min(350, Math.max(maxHeaderWidth, maxCellWidth)));
     }
 
-    // 返回换行的列名 HTML（内部处理特定列）
     function getColumnDisplayName(col) {
         const key = col.col_key;
-        const name = col.col_name;
-        // 主机相关列拆分
         if (key === 'host_purchase') return '主机<br>购买时间';
         if (key === 'host_expire') return '主机<br>到期时间';
         if (key === 'host_remaining') return '主机<br>剩余天数';
-        // 客户相关列拆分
         if (key === 'client_purchase') return '客户<br>购买时间';
         if (key === 'client_expire') return '客户<br>到期时间';
         if (key === 'client_remaining') return '客户<br>剩余天数';
-        return name;
+        return col.col_name;
     }
 
     function computeDaysRemaining(dateStr) {
@@ -567,7 +559,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 筛选面板操作函数 ---
+    // --- 筛选面板操作 ---
     function closeFilterPanels() {
         $$('.col-dropdown-panel.show').forEach(panel => panel.classList.remove('show'));
     }
@@ -772,7 +764,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function bindSpecialEvents() {
-        // 日期
         $$('.date-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
@@ -798,7 +789,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 月数
         $$('.months-dec').forEach(btn => {
             btn.onclick = function() {
                 const col = this.dataset.col;
@@ -827,7 +817,6 @@ document.addEventListener('DOMContentLoaded', function() {
             input.onchange = function() { handleCellChange(this); };
         });
 
-        // 地址下拉
         $$('.address-select').forEach(sel => {
             sel.onchange = function() {
                 const tr = this.closest('tr');
@@ -846,7 +835,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // IP地址变化同步IP信息
         $$('.cell-input[data-col="ip_address"]').forEach(input => {
             input.onchange = function() {
                 const id = parseInt(this.dataset.id);
@@ -858,7 +846,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 打开按钮
         $$('.open-link').forEach(btn => {
             btn.onclick = function() {
                 const address = this.dataset.address;
@@ -889,7 +876,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 支出
         $$('.expense-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
@@ -904,7 +890,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 收入
         $$('.fee-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
@@ -1014,7 +999,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // 导出/导入
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -1340,7 +1324,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.post('/auth/change-password', { oldPassword: oldPwd, newPassword: newPwd });
             changePwdStatus.textContent = '✅ 密码修改成功';
             oldPwdInput.value = ''; newPwdInput.value = ''; confirmPwdInput.value = '';
-        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
+        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message); }
     }
 
     // --- 注册开关 ---
@@ -1361,7 +1345,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // --- 地址后缀（独立弹窗） ---
+    // --- 地址后缀 ---
     async function loadSuffixSettings() {
         try {
             const ipSuffix = await API.get('/settings/ip_port_suffix');
@@ -1466,7 +1450,6 @@ document.addEventListener('DOMContentLoaded', function() {
         try { await API.post('/auth/logout'); window.location.href = '/login'; } catch (err) { setStatus('❌ 退出失败: ' + err.message); }
     });
 
-    // 地址后缀按钮
     addressSuffixBtn.addEventListener('click', function() {
         addressSuffixModal.classList.add('show');
     });
