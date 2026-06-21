@@ -244,7 +244,7 @@ body {
     margin-left: 2px;
 }
 
-/* 筛选面板（固定定位，JS 控制显示和位置） */
+/* 筛选面板（固定定位） */
 .col-dropdown-panel {
     display: none;
     position: fixed;
@@ -257,9 +257,7 @@ body {
     max-height: 280px;
     overflow-y: auto;
 }
-.col-dropdown-panel.show {
-    display: block;
-}
+.col-dropdown-panel.show { display: block; }
 .filter-input-wrap { margin-bottom:6px; }
 .filter-input-wrap input {
     width: 100%;
@@ -300,8 +298,13 @@ body {
 }
 .filter-actions {
     display: flex;
-    gap: 6px;
-    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.filter-actions .btn-row {
+    display: flex;
+    gap: 4px;
+    width: 100%;
 }
 .filter-actions button {
     padding: 2px 10px;
@@ -310,8 +313,12 @@ body {
     background: #fff;
     cursor: pointer;
     font-size: 12px;
+    flex: 1;
 }
 .filter-actions button:hover { background:#f5f7fa; }
+.filter-actions .btn-row.full-width {
+    justify-content: center;
+}
 .filter-summary {
     font-size: 12px;
     color: #999;
@@ -500,7 +507,7 @@ body {
 }
 .address-control .open-link:hover { background:#3a5cd7; }
 
-/* 日期控件 */
+/* 日期控件（更紧凑） */
 .date-control {
     display: inline-block;
     text-align: center;
