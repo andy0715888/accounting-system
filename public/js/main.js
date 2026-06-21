@@ -8,8 +8,8 @@ document.addEventListener('DOMContentLoaded', function() {
         columns: [],
         records: [],
         selectedRows: new Set(),
-        filters: {},
-        filterOptions: {},
+        filters: {},                // { colKey: [selectedDisplayValue1, ...] }
+        filterOptions: {},          // 缓存每列所有可选值及其计数
         isLoaded: false,
         userName: '',
         isAdmin: false,
@@ -59,7 +59,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const registerSwitchStatus = $('#registerSwitchStatus');
     const registerSwitchGroup = $('#registerSwitchGroup');
 
-    // 地址后缀弹窗相关
     const addressSuffixModal = $('#addressSuffixModal');
     const closeAddressSuffixModal = $('#closeAddressSuffixModal');
     const ipPortSuffixInput = $('#ipPortSuffixInput');
@@ -127,6 +126,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.ceil(ctx.measureText(text).width);
     }
 
+    // 获取显示值（用于表格和筛选）
     function getDisplayValue(record, col) {
         if (!record || !col) return '';
         const colKey = col.col_key;
@@ -147,6 +147,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // 计算收入值
     function computeFeeValue(raw) {
         if (!raw && raw !== 0) return '';
         const str = String(raw).trim();
@@ -159,6 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return isNaN(num) ? raw : num;
     }
 
+    // 计算列宽
     function calcColumnWidth(col) {
         let headerText = getColumnDisplayName(col);
         let lines = headerText.split('<br>');
@@ -277,6 +279,7 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadRecords(tabId) {
         const records = await API.get('/records?tabId=' + tabId);
         state.records = records;
+        // 更新每列的筛选项（显示值）及其计数
         state.columns.forEach(col => {
             const valueCountMap = new Map();
             state.records.forEach(r => {
@@ -411,12 +414,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 渲染表格 ---
+    // --- 渲染表格（筛选面板移至 body 末尾，使用固定定位） ---
     function renderTable(shouldAutoFit = false) {
         if (!state.currentTabId) return;
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
         const filteredRecords = getFilteredRecords();
 
+        // 表头
         let theadHtml = `<tr><th style="width:36px;min-width:36px;max-width:36px;text-align:center;"><input type="checkbox" id="selectAll" /></th>`;
         visibleColumns.forEach(col => {
             const isIncome = col.is_income || 0;
@@ -428,37 +432,11 @@ document.addEventListener('DOMContentLoaded', function() {
             const width = (savedWidth && savedWidth !== 150) ? savedWidth : calcColumnWidth(col);
             const displayName = getColumnDisplayName(col);
 
-            const options = state.filterOptions[col.col_key] || [];
-            const optionsHtml = options.map(opt => `
-                <label class="filter-option-label" data-filter-label="${escapeHtml(String(opt.value).toLowerCase())}">
-                    <input type="checkbox" class="filter-option" data-col="${escapeAttr(col.col_key)}" value="${escapeAttr(opt.value)}" />
-                    <span class="filter-option-text">${escapeHtml(opt.value)}</span>
-                    <span class="filter-count">(${opt.count})</span>
-                </label>
-            `).join('');
-
             theadHtml += `
                 <th data-col="${escapeAttr(col.col_key)}" style="width:${width}px;min-width:${width}px;max-width:${width}px;">
                     <div class="th-inner">
                         <span class="col-name">${displayName} ${incomeLabel}</span>
                         <button class="col-dropdown-btn ${hasFilter}" data-col="${escapeAttr(col.col_key)}">▼</button>
-                    </div>
-                    <div class="col-dropdown-panel" data-col="${escapeAttr(col.col_key)}">
-                        <div class="filter-input-wrap">
-                            <input type="text" placeholder="搜索..." class="filter-search" data-col="${escapeAttr(col.col_key)}" />
-                        </div>
-                        <div class="filter-options">
-                            <label class="filter-option-label filter-select-all">
-                                <input type="checkbox" class="filter-select-all-checkbox" data-col="${escapeAttr(col.col_key)}" /> <span class="filter-option-text">全选</span>
-                            </label>
-                            ${optionsHtml}
-                        </div>
-                        <div class="filter-summary">已选 0 / ${options.length}</div>
-                        <div class="filter-actions">
-                            <button class="filter-ok" data-col="${escapeAttr(col.col_key)}">确定</button>
-                            <button class="filter-cancel" data-col="${escapeAttr(col.col_key)}">取消</button>
-                            <button class="filter-clear" data-col="${escapeAttr(col.col_key)}">清除筛选</button>
-                        </div>
                     </div>
                     <div class="col-resize" data-col="${escapeAttr(col.col_key)}"></div>
                 </th>
@@ -467,6 +445,46 @@ document.addEventListener('DOMContentLoaded', function() {
         theadHtml += '</tr>';
         tableHead.innerHTML = theadHtml;
 
+        // 构建所有筛选面板 HTML
+        let panelsHtml = '';
+        visibleColumns.forEach(col => {
+            const options = state.filterOptions[col.col_key] || [];
+            const optionsHtml = options.map(opt => `
+                <label class="filter-option-label" data-filter-label="${escapeHtml(String(opt.value).toLowerCase())}">
+                    <input type="checkbox" class="filter-option" data-col="${escapeAttr(col.col_key)}" value="${escapeAttr(opt.value)}" />
+                    <span class="filter-option-text">${escapeHtml(opt.value)}</span>
+                    <span class="filter-count">(${opt.count})</span>
+                </label>
+            `).join('');
+            panelsHtml += `
+                <div class="col-dropdown-panel" data-col="${escapeAttr(col.col_key)}">
+                    <div class="filter-input-wrap">
+                        <input type="text" placeholder="搜索..." class="filter-search" data-col="${escapeAttr(col.col_key)}" />
+                    </div>
+                    <div class="filter-options">
+                        <label class="filter-option-label filter-select-all">
+                            <input type="checkbox" class="filter-select-all-checkbox" data-col="${escapeAttr(col.col_key)}" /> <span class="filter-option-text">全选</span>
+                        </label>
+                        ${optionsHtml}
+                    </div>
+                    <div class="filter-summary">已选 0 / ${options.length}</div>
+                    <div class="filter-actions">
+                        <button class="filter-ok" data-col="${escapeAttr(col.col_key)}">确定</button>
+                        <button class="filter-cancel" data-col="${escapeAttr(col.col_key)}">取消</button>
+                        <button class="filter-clear" data-col="${escapeAttr(col.col_key)}">清除筛选</button>
+                    </div>
+                </div>
+            `;
+        });
+        // 移除旧的筛选面板容器
+        const oldPanelContainer = document.getElementById('filter-panels-container');
+        if (oldPanelContainer) oldPanelContainer.remove();
+        const panelContainer = document.createElement('div');
+        panelContainer.id = 'filter-panels-container';
+        panelContainer.innerHTML = panelsHtml;
+        document.body.appendChild(panelContainer);
+
+        // 表体
         if (filteredRecords.length === 0) {
             tableBody.innerHTML = `<tr><td colspan="${visibleColumns.length + 1}" style="text-align:center;padding:40px 0;color:#999;">📭 暂无数据</td></tr>`;
             recordCount.textContent = Object.keys(state.filters).length > 0 ? `共 0 / 全部 ${state.records.length} 条记录` : `共 0 条记录`;
@@ -595,7 +613,21 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 筛选面板函数 ---
+    // --- 筛选面板定位 ---
+    function positionFilterPanel(panel, colKey) {
+        const th = document.querySelector(`th[data-col="${colKey}"]`);
+        if (!th) return;
+        const rect = th.getBoundingClientRect();
+        const panelWidth = Math.max(rect.width, 140); // 最小宽度 140px
+        panel.style.position = 'fixed';
+        panel.style.left = rect.left + 'px';
+        panel.style.top = (rect.bottom + 2) + 'px';
+        panel.style.width = panelWidth + 'px';
+        panel.style.maxHeight = '280px';
+        panel.style.overflowY = 'auto';
+        panel.style.zIndex = '10000';
+    }
+
     function closeFilterPanels() {
         $$('.col-dropdown-panel.show').forEach(panel => panel.classList.remove('show'));
     }
@@ -645,16 +677,18 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function bindFilterEvents() {
+        // 打开面板
         $$('.col-dropdown-btn').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
-                const col = this.dataset.col;
-                const panel = document.querySelector(`.col-dropdown-panel[data-col="${col}"]`);
+                const colKey = this.dataset.col;
+                const panel = document.querySelector(`.col-dropdown-panel[data-col="${colKey}"]`);
                 if (!panel) return;
-                const shouldOpen = !panel.classList.contains('show');
+                const isOpen = panel.classList.contains('show');
                 closeFilterPanels();
-                if (shouldOpen) {
-                    syncFilterPanel(panel, col);
+                if (!isOpen) {
+                    syncFilterPanel(panel, colKey);
+                    positionFilterPanel(panel, colKey);
                     panel.classList.add('show');
                     const search = panel.querySelector('.filter-search');
                     if (search) setTimeout(() => search.focus(), 0);
@@ -662,10 +696,18 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        $$('.filter-search').forEach(input => {
-            input.oninput = function() {
-                const panel = this.closest('.col-dropdown-panel');
-                const searchText = this.value.trim().toLowerCase();
+        // 全局点击关闭
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.col-dropdown-btn') && !e.target.closest('.col-dropdown-panel')) {
+                closeFilterPanels();
+            }
+        }, true);
+
+        // 搜索过滤（委托在 body 上）
+        document.body.addEventListener('input', function(e) {
+            if (e.target.classList.contains('filter-search')) {
+                const panel = e.target.closest('.col-dropdown-panel');
+                const searchText = e.target.value.trim().toLowerCase();
                 panel.querySelectorAll('.filter-option-label:not(.filter-select-all)').forEach(label => {
                     const text = label.dataset.filterLabel || '';
                     label.hidden = searchText !== '' && !text.includes(searchText);
@@ -673,69 +715,44 @@ document.addEventListener('DOMContentLoaded', function() {
                 const selectAllLabel = panel.querySelector('.filter-select-all');
                 if (selectAllLabel) selectAllLabel.hidden = searchText !== '';
                 updateSelectAllCheckbox(panel);
-            };
-            input.onclick = (e) => e.stopPropagation();
+            }
         });
 
-        $$('.filter-select-all-checkbox').forEach(cb => {
-            cb.onchange = function() {
-                const panel = this.closest('.col-dropdown-panel');
+        // 复选框变化
+        document.body.addEventListener('change', function(e) {
+            if (e.target.classList.contains('filter-select-all-checkbox')) {
+                const panel = e.target.closest('.col-dropdown-panel');
                 const visibleOptions = getVisibleFilterOptions(panel);
-                visibleOptions.forEach(opt => { opt.checked = this.checked; });
+                visibleOptions.forEach(opt => { opt.checked = e.target.checked; });
                 updateSelectAllCheckbox(panel);
-            };
+            } else if (e.target.classList.contains('filter-option') && !e.target.classList.contains('filter-select-all-checkbox')) {
+                updateSelectAllCheckbox(e.target.closest('.col-dropdown-panel'));
+            }
         });
 
-        $$('.filter-options').forEach(container => {
-            container.addEventListener('change', function(e) {
-                if (e.target.classList.contains('filter-option') && !e.target.classList.contains('filter-select-all-checkbox')) {
-                    updateSelectAllCheckbox(this.closest('.col-dropdown-panel'));
-                }
-            });
-        });
-
-        $$('.filter-ok').forEach(btn => {
-            btn.onclick = function(e) {
-                e.stopPropagation();
-                const col = this.dataset.col;
-                const panel = document.querySelector(`.col-dropdown-panel[data-col="${col}"]`);
+        // 确定/取消/清除按钮
+        document.body.addEventListener('click', function(e) {
+            if (e.target.classList.contains('filter-ok')) {
+                const colKey = e.target.dataset.col;
+                const panel = document.querySelector(`.col-dropdown-panel[data-col="${colKey}"]`);
                 if (!panel) return;
                 const allValues = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox)')).map(cb => cb.value);
                 const checkedValues = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox):checked')).map(cb => cb.value);
-                if (checkedValues.length === allValues.length) delete state.filters[col];
-                else state.filters[col] = checkedValues;
+                if (checkedValues.length === allValues.length) delete state.filters[colKey];
+                else state.filters[colKey] = checkedValues;
                 panel.classList.remove('show');
                 renderTable(false);
-            };
-        });
-
-        $$('.filter-cancel').forEach(btn => {
-            btn.onclick = function(e) {
-                e.stopPropagation();
-                const panel = this.closest('.col-dropdown-panel');
+            } else if (e.target.classList.contains('filter-cancel')) {
+                const panel = e.target.closest('.col-dropdown-panel');
                 if (panel) panel.classList.remove('show');
-            };
-        });
-
-        $$('.filter-clear').forEach(btn => {
-            btn.onclick = function(e) {
-                e.stopPropagation();
-                const col = this.dataset.col;
-                delete state.filters[col];
-                const panel = document.querySelector(`.col-dropdown-panel[data-col="${col}"]`);
+            } else if (e.target.classList.contains('filter-clear')) {
+                const colKey = e.target.dataset.col;
+                delete state.filters[colKey];
+                const panel = document.querySelector(`.col-dropdown-panel[data-col="${colKey}"]`);
                 if (panel) panel.classList.remove('show');
                 renderTable(false);
-            };
+            }
         });
-
-        if (!filterDocumentClickBound) {
-            document.addEventListener('click', function(e) {
-                if (!e.target.closest('.col-dropdown-btn') && !e.target.closest('.col-dropdown-panel')) {
-                    closeFilterPanels();
-                }
-            });
-            filterDocumentClickBound = true;
-        }
     }
 
     // --- 表格单元格事件 ---
@@ -772,6 +789,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (input.tagName === 'SELECT') input.onchange = () => handleCellChange(input);
         });
 
+        // 列宽拖拽
         $$('.col-resize').forEach(handle => {
             let startX, startWidth, colKey;
             handle.onmousedown = (e) => {
@@ -803,6 +821,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function bindSpecialEvents() {
+        // 日期
         $$('.date-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
@@ -828,6 +847,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
+        // 月数
         $$('.months-dec').forEach(btn => {
             btn.onclick = function() {
                 const col = this.dataset.col;
@@ -856,6 +876,7 @@ document.addEventListener('DOMContentLoaded', function() {
             input.onchange = function() { handleCellChange(this); };
         });
 
+        // 地址下拉
         $$('.address-select').forEach(sel => {
             sel.onchange = function() {
                 const tr = this.closest('tr');
@@ -874,6 +895,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
+        // IP地址变化
         $$('.cell-input[data-col="ip_address"]').forEach(input => {
             input.onchange = function() {
                 const id = parseInt(this.dataset.id);
@@ -885,6 +907,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
+        // 打开按钮
         $$('.open-link').forEach(btn => {
             btn.onclick = function() {
                 const address = this.dataset.address;
@@ -915,6 +938,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
+        // 支出
         $$('.expense-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
@@ -929,6 +953,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
+        // 收入（公式交互）
         $$('.fee-display').forEach(display => {
             display.addEventListener('click', function(e) {
                 const parent = this.parentElement;
@@ -1068,7 +1093,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data.client_expire = getNextMonth(now).toISOString().split('T')[0];
             data.expense = 0;
             data.fee = '';
-            data.address = 'IP地址';
+            data.address = 'IP地址';  // 存储原值
 
             const result = await API.post('/records', { tab_id: state.currentTabId, data });
             const newRecord = { id: result.id, data };
