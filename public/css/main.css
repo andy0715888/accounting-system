@@ -299,7 +299,7 @@ body {
 }
 .filter-actions button:hover { background:#f5f7fa; }
 
-/* 列宽拖拽把手 */
+/* 列宽拖拽 */
 #dataTable th .col-resize {
     position: absolute;
     right: 0;
@@ -433,6 +433,27 @@ body {
     -moz-appearance: textfield;
 }
 
+/* 收入列内联布局（公式支持） */
+.fee-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.fee-input {
+    width: 80px !important;
+    min-width: 80px;
+}
+.fee-result {
+    font-weight: bold;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
 /* 地址控件 */
 .address-control {
     display: flex;
@@ -458,7 +479,7 @@ body {
 }
 .address-control .open-link:hover { background:#3a5cd7; }
 
-/* 日期控件（更紧凑） */
+/* 日期控件 */
 .date-control {
     display: inline-block;
     text-align: center;
