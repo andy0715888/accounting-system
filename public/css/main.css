@@ -243,24 +243,23 @@ body {
     color: #4a6cf7;
     margin-left: 2px;
 }
+
+/* 筛选面板（固定定位，JS 控制显示和位置） */
 .col-dropdown-panel {
     display: none;
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
+    position: fixed;
     background: #fff;
     border: 1px solid #dcdfe6;
     border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    padding: 10px;
-    min-width: 180px;
-    max-height: 300px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 8px;
+    z-index: 10000;
+    max-height: 280px;
     overflow-y: auto;
-    z-index: 100;
-    margin-top: 2px;
 }
-.col-dropdown-panel.show { display: block; }
+.col-dropdown-panel.show {
+    display: block;
+}
 .filter-input-wrap { margin-bottom:6px; }
 .filter-input-wrap input {
     width: 100%;
@@ -501,7 +500,7 @@ body {
 }
 .address-control .open-link:hover { background:#3a5cd7; }
 
-/* 日期控件（更紧凑） */
+/* 日期控件 */
 .date-control {
     display: inline-block;
     text-align: center;
