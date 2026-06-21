@@ -39,7 +39,7 @@ body {
 .nav-btn:hover { background: rgba(255,255,255,0.2); }
 #currentTimeDisplay { font-size:14px; opacity:0.8; }
 
-/* 顶部水平菜单（取代原侧边栏） */
+/* 顶部水平菜单 */
 .top-menu {
     background: #fff;
     border-bottom: 1px solid #e4e7ed;
@@ -78,7 +78,7 @@ body {
 }
 .top-menu .menu-item span:first-child { font-size:18px; }
 
-/* 主体布局：全宽，不再有侧边栏 */
+/* 主体布局 */
 .main-body {
     display: flex;
     flex: 1;
@@ -208,7 +208,7 @@ body {
     color: #333;
     border-bottom: 2px solid #e4e7ed;
     user-select: none;
-    white-space: normal;      /* 允许表头换行 */
+    white-space: normal;
     position: relative;
     min-width: 60px;
 }
@@ -356,7 +356,7 @@ body {
     cursor: pointer;
 }
 
-/* 月数控件（紧凑型，- 数字 +） */
+/* 月数控件 */
 .months-control {
     display: flex;
     align-items: center;
@@ -396,7 +396,6 @@ body {
     outline: none;
     height: 20px;
 }
-/* 隐藏数字输入框原生上下箭头 */
 .months-control input[type="number"]::-webkit-outer-spin-button,
 .months-control input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -406,7 +405,7 @@ body {
     -moz-appearance: textfield;
 }
 
-/* 支出列内联布局（单价输入框 + 计算结果） */
+/* 支出列内联布局 */
 .expense-inline {
     display: inline-flex;
     align-items: center;
@@ -425,7 +424,6 @@ body {
     font-size: 13px;
     white-space: nowrap;
 }
-/* 隐藏支出输入框微调按钮 */
 .expense-input[type="number"]::-webkit-outer-spin-button,
 .expense-input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -460,16 +458,16 @@ body {
 }
 .address-control .open-link:hover { background:#3a5cd7; }
 
-/* 日期控件 */
+/* 日期控件（更紧凑） */
 .date-control {
     display: inline-block;
     text-align: center;
 }
 .date-control input[type="date"] {
-    padding: 2px 4px;
+    padding: 1px 2px;
     border: 1px solid #dcdfe6;
     border-radius: 4px;
-    font-size: 13px;
+    font-size: 12px;
     text-align: center;
 }
 
@@ -729,7 +727,7 @@ body {
 }
 #bgFileInput { display:none; }
 
-/* 地址后缀弹窗内样式 */
+/* 地址后缀弹窗 */
 .suffix-setting {
     display: flex;
     flex-direction: column;
