@@ -179,6 +179,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (key === 'client_purchase') return '客户<br>购买时间';
         if (key === 'client_expire') return '客户<br>到期时间';
         if (key === 'client_remaining') return '客户<br>剩余天数';
+        if (key === 'unit_price') return '单价<br>备注';
         return col.col_name;
     }
 
@@ -224,7 +225,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) { return expr; }
     }
 
-    // --- API ---
     const API = {
         get: (url) => fetch('/api' + url, { credentials: 'include' }).then(r => r.json()),
         post: (url, data) => fetch('/api' + url, {
@@ -236,21 +236,12 @@ document.addEventListener('DOMContentLoaded', function() {
         delete: (url) => fetch('/api' + url, { method: 'DELETE', credentials: 'include' }).then(r => r.json())
     };
 
-    async function loadTabs() {
-        const tabs = await API.get('/tabs');
-        state.tabs = tabs;
-        return tabs;
-    }
-    async function loadColumns(tabId) {
-        const cols = await API.get('/columns?tabId=' + tabId);
-        state.columns = cols;
-        return cols;
-    }
+    async function loadTabs() { state.tabs = await API.get('/tabs'); return state.tabs; }
+    async function loadColumns(tabId) { state.columns = await API.get('/columns?tabId=' + tabId); return state.columns; }
     async function loadRecords(tabId) {
-        const records = await API.get('/records?tabId=' + tabId);
-        state.records = records;
+        state.records = await API.get('/records?tabId=' + tabId);
         updateAllFilterOptions();
-        return records;
+        return state.records;
     }
 
     function updateAllFilterOptions() {
@@ -280,14 +271,10 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function loadDataForTab(tabId) {
-        try {
-            await loadColumns(tabId);
-            await loadRecords(tabId);
-            setStatus(`✅ 已加载 ${state.records.length} 条记录`);
-        } catch (err) { setStatus('❌ 加载失败: ' + err.message); }
+        try { await loadColumns(tabId); await loadRecords(tabId); setStatus(`✅ 已加载 ${state.records.length} 条记录`); }
+        catch (err) { setStatus('❌ 加载失败: ' + err.message); }
     }
 
-    // 标签渲染
     function renderTabs() {
         let html = '';
         state.tabs.forEach(tab => {
@@ -298,7 +285,6 @@ document.addEventListener('DOMContentLoaded', function() {
             </button>`;
         });
         tabBar.innerHTML = html;
-
         tabBar.querySelectorAll('.tab-name').forEach(el => {
             el.addEventListener('dblclick', async function(e) {
                 e.stopPropagation();
@@ -310,11 +296,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     const tab = state.tabs.find(t => t.id === tabId);
                     if (tab) tab.name = newName.trim();
                     renderTabs();
-                    setStatus('✅ 标签已重命名');
                 }
             });
         });
-
         tabBar.querySelectorAll('.tab-item').forEach(btn => {
             btn.addEventListener('click', function(e) {
                 if (e.target.classList.contains('tab-close') || e.target.classList.contains('tab-name')) return;
@@ -359,13 +343,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (state.currentTabId) await switchTab(state.currentTabId);
         else await createDefaultTab();
     }
-
     addTabBtn.addEventListener('click', () => {
         const name = prompt('请输入新标签名称：', '新标签');
         if (name && name.trim()) createTab(name.trim());
     });
 
-    // 筛选辅助
     function normalizeFilterValue(value) {
         if (value === null || value === undefined || String(value).trim() === '') return '(空白)';
         return String(value).trim();
@@ -385,7 +367,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 渲染表格
+    // 渲染表格（刷新时不自动适配列宽）
     function renderTable(shouldAutoFit = false) {
         if (!state.currentTabId) return;
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
@@ -394,13 +376,11 @@ document.addEventListener('DOMContentLoaded', function() {
         let theadHtml = `<tr><th style="width:36px;min-width:36px;max-width:36px;text-align:center;"><input type="checkbox" id="selectAll" /></th>`;
         visibleColumns.forEach(col => {
             const isIncome = col.is_income || 0;
-            let incomeLabel = '';
-            if (isIncome === 1) incomeLabel = '💰';
-            else if (isIncome === 2) incomeLabel = '💸';
+            let incomeLabel = isIncome === 1 ? '💰' : (isIncome === 2 ? '💸' : '');
             const hasFilter = isFilterActive(col.col_key) ? 'filter-active' : '';
-            const width = (col.col_width && col.col_width !== 150) ? col.col_width : calcColumnWidth(col);
+            const savedWidth = col.col_width;
+            const width = (savedWidth && savedWidth !== 150) ? savedWidth : calcColumnWidth(col);
             const displayName = getColumnDisplayName(col);
-
             theadHtml += `
                 <th data-col="${escapeAttr(col.col_key)}" style="width:${width}px;min-width:${width}px;max-width:${width}px;">
                     <div class="th-inner">
@@ -445,10 +425,11 @@ document.addEventListener('DOMContentLoaded', function() {
                         else if (opt === '域名地址') display = '域名';
                         return `<option value="${escapeAttr(opt)}" ${val === opt ? 'selected' : ''}>${escapeHtml(display)}</option>`;
                     }).join('');
+                    const addressValue = val || '';
                     inputHtml = `
                         <div class="address-control">
                             <select class="cell-input address-select" data-col="${escapeAttr(colKey)}" data-id="${record.id}">${options}</select>
-                            <button class="open-link" data-address="${escapeAttr(val || '')}">打开</button>
+                            <button class="open-link" data-address="${escapeAttr(addressValue)}">打开</button>
                         </div>
                     `;
                 } else if (col.col_type === 'number' && colKey === 'months') {
@@ -463,7 +444,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (col.col_type === 'date') {
                     const dateVal = val || '';
                     if (colKey === 'host_expire') {
-                        inputHtml = `<span style="color:#333;">${escapeHtml(formatDisplayDate(dateVal))}</span>`;
+                        const display = formatDisplayDate(dateVal);
+                        inputHtml = `<span style="color:#333;">${escapeHtml(display)}</span>`;
                     } else {
                         inputHtml = `<div class="date-control"><input type="date" class="cell-input date-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(dateVal)}" /></div>`;
                     }
@@ -471,7 +453,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     const options = (col.col_options || []).map(opt => `<option value="${escapeAttr(opt)}" ${val === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('');
                     inputHtml = `<select class="cell-input select-cell" data-col="${escapeAttr(colKey)}" data-id="${record.id}"><option value="">-</option>${options}</select>`;
                 } else if (colKey === 'is_expired') {
-                    const status = checkExpired(record.data.host_expire);
+                    const expireDate = record.data.host_expire;
+                    const status = checkExpired(expireDate);
                     const color = status === '有效' ? '#67c23a' : (status === '过期' ? '#f56c6c' : '#999');
                     inputHtml = `<span style="color:${color};">${escapeHtml(status)}</span>`;
                 } else if (colKey === 'expense') {
@@ -710,7 +693,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 表格事件
     function bindTableEvents() {
         const selectAll = $('#selectAll');
         if (selectAll) {
@@ -1451,7 +1433,7 @@ document.addEventListener('DOMContentLoaded', function() {
     exportBtn.addEventListener('click', exportData);
     importBtn.addEventListener('click', showImportModal);
     refreshBtn.addEventListener('click', function() {
-        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(true));
+        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(false));
     });
     manageColumnsBtn.addEventListener('click', showColumnManager);
     logoutBtn.addEventListener('click', async function() {
@@ -1543,7 +1525,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 await loadDataForTab(state.currentTabId);
             }
             renderTabs();
-            renderTable(true);
+            renderTable(true);  // 初次加载自动适配列宽
             setStatus('✅ 加载完成');
             const tab = state.tabs.find(t => t.id === state.currentTabId);
             if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
