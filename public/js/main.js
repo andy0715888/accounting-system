@@ -8,8 +8,8 @@ document.addEventListener('DOMContentLoaded', function() {
         columns: [],
         records: [],
         selectedRows: new Set(),
-        filters: {},                // { colKey: [selectedValue1, ...] }
-        filterOptions: {},          // 缓存每列所有可选值（显示值）
+        filters: {},
+        filterOptions: {},
         isLoaded: false,
         userName: '',
         isAdmin: false,
@@ -127,7 +127,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.ceil(ctx.measureText(text).width);
     }
 
-    // 获取显示值（用于表格和筛选）
     function getDisplayValue(record, col) {
         if (!record || !col) return '';
         const colKey = col.col_key;
@@ -148,7 +147,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 计算收入值
     function computeFeeValue(raw) {
         if (!raw && raw !== 0) return '';
         const str = String(raw).trim();
@@ -161,7 +159,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return isNaN(num) ? raw : num;
     }
 
-    // 计算列宽
     function calcColumnWidth(col) {
         let headerText = getColumnDisplayName(col);
         let lines = headerText.split('<br>');
@@ -280,14 +277,12 @@ document.addEventListener('DOMContentLoaded', function() {
     async function loadRecords(tabId) {
         const records = await API.get('/records?tabId=' + tabId);
         state.records = records;
-        // 更新每列的筛选项（显示值）
         state.columns.forEach(col => {
             const valueCountMap = new Map();
             state.records.forEach(r => {
                 const dv = normalizeFilterValue(getDisplayValue(r, col));
                 valueCountMap.set(dv, (valueCountMap.get(dv) || 0) + 1);
             });
-            // 保存为数组 [{value, count}]，并按值排序
             state.filterOptions[col.col_key] = Array.from(valueCountMap.entries())
                 .map(([val, cnt]) => ({ value: val, count: cnt }))
                 .sort((a, b) => String(a.value).localeCompare(String(b.value)));
@@ -422,7 +417,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
         const filteredRecords = getFilteredRecords();
 
-        // 表头
         let theadHtml = `<tr><th style="width:36px;min-width:36px;max-width:36px;text-align:center;"><input type="checkbox" id="selectAll" /></th>`;
         visibleColumns.forEach(col => {
             const isIncome = col.is_income || 0;
@@ -434,7 +428,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const width = (savedWidth && savedWidth !== 150) ? savedWidth : calcColumnWidth(col);
             const displayName = getColumnDisplayName(col);
 
-            // 生成筛选选项HTML（带计数）
             const options = state.filterOptions[col.col_key] || [];
             const optionsHtml = options.map(opt => `
                 <label class="filter-option-label" data-filter-label="${escapeHtml(String(opt.value).toLowerCase())}">
@@ -474,7 +467,6 @@ document.addEventListener('DOMContentLoaded', function() {
         theadHtml += '</tr>';
         tableHead.innerHTML = theadHtml;
 
-        // 表体
         if (filteredRecords.length === 0) {
             tableBody.innerHTML = `<tr><td colspan="${visibleColumns.length + 1}" style="text-align:center;padding:40px 0;color:#999;">📭 暂无数据</td></tr>`;
             recordCount.textContent = Object.keys(state.filters).length > 0 ? `共 0 / 全部 ${state.records.length} 条记录` : `共 0 条记录`;
@@ -501,7 +493,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     const color = days < 0 ? '#f56c6c' : (days <= 7 ? '#e6a23c' : '#333');
                     inputHtml = `<span style="color:${color};">${escapeHtml(displayVal)}</span>`;
                 } else if (col.col_type === 'address_select') {
-                    // 映射选项文本：IP地址 -> IP，域名地址 -> 域名
                     const optionsArr = col.col_options || [];
                     const options = optionsArr.map(opt => {
                         let display = opt;
@@ -604,7 +595,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 筛选面板函数（重写，包含计数和搜索） ---
+    // --- 筛选面板函数 ---
     function closeFilterPanels() {
         $$('.col-dropdown-panel.show').forEach(panel => panel.classList.remove('show'));
     }
@@ -654,7 +645,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function bindFilterEvents() {
-        // 绑定打开按钮
         $$('.col-dropdown-btn').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
@@ -672,7 +662,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 搜索过滤
         $$('.filter-search').forEach(input => {
             input.oninput = function() {
                 const panel = this.closest('.col-dropdown-panel');
@@ -681,7 +670,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     const text = label.dataset.filterLabel || '';
                     label.hidden = searchText !== '' && !text.includes(searchText);
                 });
-                // 如果搜索，隐藏全选行
                 const selectAllLabel = panel.querySelector('.filter-select-all');
                 if (selectAllLabel) selectAllLabel.hidden = searchText !== '';
                 updateSelectAllCheckbox(panel);
@@ -689,7 +677,6 @@ document.addEventListener('DOMContentLoaded', function() {
             input.onclick = (e) => e.stopPropagation();
         });
 
-        // 全选复选框
         $$('.filter-select-all-checkbox').forEach(cb => {
             cb.onchange = function() {
                 const panel = this.closest('.col-dropdown-panel');
@@ -699,7 +686,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 选项变化时更新全选框状态
         $$('.filter-options').forEach(container => {
             container.addEventListener('change', function(e) {
                 if (e.target.classList.contains('filter-option') && !e.target.classList.contains('filter-select-all-checkbox')) {
@@ -708,7 +694,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 确定
         $$('.filter-ok').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
@@ -724,7 +709,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 取消
         $$('.filter-cancel').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
@@ -733,7 +717,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 清除
         $$('.filter-clear').forEach(btn => {
             btn.onclick = function(e) {
                 e.stopPropagation();
@@ -820,7 +803,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function bindSpecialEvents() {
-        // 日期
         $$('.date-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
@@ -846,7 +828,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 月数
         $$('.months-dec').forEach(btn => {
             btn.onclick = function() {
                 const col = this.dataset.col;
@@ -875,7 +856,6 @@ document.addEventListener('DOMContentLoaded', function() {
             input.onchange = function() { handleCellChange(this); };
         });
 
-        // 地址下拉
         $$('.address-select').forEach(sel => {
             sel.onchange = function() {
                 const tr = this.closest('tr');
@@ -894,7 +874,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // IP地址变化
         $$('.cell-input[data-col="ip_address"]').forEach(input => {
             input.onchange = function() {
                 const id = parseInt(this.dataset.id);
@@ -906,7 +885,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 打开按钮
         $$('.open-link').forEach(btn => {
             btn.onclick = function() {
                 const address = this.dataset.address;
@@ -937,7 +915,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 支出
         $$('.expense-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
@@ -952,7 +929,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 收入
         $$('.fee-display').forEach(display => {
             display.addEventListener('click', function(e) {
                 const parent = this.parentElement;
@@ -1092,7 +1068,7 @@ document.addEventListener('DOMContentLoaded', function() {
             data.client_expire = getNextMonth(now).toISOString().split('T')[0];
             data.expense = 0;
             data.fee = '';
-            data.address = 'IP地址';  // 存储仍为原值
+            data.address = 'IP地址';
 
             const result = await API.post('/records', { tab_id: state.currentTabId, data });
             const newRecord = { id: result.id, data };
@@ -1430,7 +1406,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.post('/auth/change-password', { oldPassword: oldPwd, newPassword: newPwd });
             changePwdStatus.textContent = '✅ 密码修改成功';
             oldPwdInput.value = ''; newPwdInput.value = ''; confirmPwdInput.value = '';
-        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message); }
+        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
     }
 
     // --- 注册开关 ---
