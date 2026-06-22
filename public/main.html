@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="/css/main.css">
 </head>
 <body>
-    <!-- 顶部导航 -->
     <header class="navbar">
         <div class="nav-left">
             <span class="nav-logo">📊 记账系统</span>
@@ -22,7 +21,6 @@
         </div>
     </header>
 
-    <!-- 顶部菜单栏 -->
     <nav class="top-menu">
         <ul class="menu">
             <li class="menu-item active" data-view="table"><span>📋</span> 记账表格</li>
@@ -31,16 +29,13 @@
         </ul>
     </nav>
 
-    <!-- 主体 -->
     <div class="main-body">
         <div class="content-area">
-            <!-- 表格视图 -->
             <div id="view-table" class="view-panel active">
                 <div class="tab-bar-container">
                     <div class="tab-bar" id="tabBar"></div>
                     <button class="add-tab-btn" id="addTabBtn">➕</button>
                 </div>
-
                 <div class="tab-toolbar">
                     <div class="toolbar-left">
                         <button class="tool-btn primary" id="addRowBtn">➕ 添加行</button>
@@ -58,7 +53,6 @@
                         <span class="record-count" id="recordCount">共 0 条记录</span>
                     </div>
                 </div>
-
                 <div class="table-container">
                     <div class="table-wrapper" id="tableWrapper">
                         <table id="dataTable">
@@ -68,64 +62,40 @@
                     </div>
                 </div>
             </div>
-
-            <!-- 统计视图 -->
             <div id="view-stats" class="view-panel">
                 <h2>📈 财务统计</h2>
                 <div class="stats-container" id="statsContainer"></div>
             </div>
-
-            <!-- 设置视图 -->
             <div id="view-settings" class="view-panel">
                 <h2>⚙️ 系统设置</h2>
                 <div class="settings-container">
                     <div class="setting-group" id="registerSwitchGroup" style="display:none;">
                         <h3>🔓 注册管理</h3>
                         <p class="setting-desc">关闭后，新用户无法注册</p>
-                        <label>
-                            <input type="checkbox" id="allowRegisterCheckbox"> 允许新用户注册
-                        </label>
+                        <label><input type="checkbox" id="allowRegisterCheckbox"> 允许新用户注册</label>
                         <button class="tool-btn primary" id="saveRegisterSwitchBtn">保存注册开关</button>
                         <span id="registerSwitchStatus"></span>
                     </div>
-
                     <div class="setting-group">
                         <h3>🔐 修改密码</h3>
                         <div class="password-form">
-                            <div class="input-group">
-                                <label>当前密码</label>
-                                <input type="password" id="oldPassword" placeholder="请输入当前密码" />
-                            </div>
-                            <div class="input-group">
-                                <label>新密码</label>
-                                <input type="password" id="newPassword" placeholder="至少6位" />
-                            </div>
-                            <div class="input-group">
-                                <label>确认密码</label>
-                                <input type="password" id="confirmPassword" placeholder="再次输入" />
-                            </div>
+                            <div class="input-group"><label>当前密码</label><input type="password" id="oldPassword" placeholder="请输入当前密码" /></div>
+                            <div class="input-group"><label>新密码</label><input type="password" id="newPassword" placeholder="至少6位" /></div>
+                            <div class="input-group"><label>确认密码</label><input type="password" id="confirmPassword" placeholder="再次输入" /></div>
                             <button class="tool-btn primary" id="changePasswordBtn">修改密码</button>
                             <span id="changePwdStatus"></span>
                         </div>
                     </div>
-
                     <div class="setting-group">
                         <h3>🔐 HTTPS 证书</h3>
                         <p class="setting-desc">设置证书路径后，重启服务将启用 HTTPS</p>
                         <div class="cert-setting">
-                            <div class="input-group">
-                                <label>证书文件 (cert.pem)</label>
-                                <input type="text" id="certPathInput" placeholder="/etc/ssl/cert.pem" />
-                            </div>
-                            <div class="input-group">
-                                <label>私钥文件 (key.pem)</label>
-                                <input type="text" id="keyPathInput" placeholder="/etc/ssl/key.pem" />
-                            </div>
+                            <div class="input-group"><label>证书文件 (cert.pem)</label><input type="text" id="certPathInput" placeholder="/etc/ssl/cert.pem" /></div>
+                            <div class="input-group"><label>私钥文件 (key.pem)</label><input type="text" id="keyPathInput" placeholder="/etc/ssl/key.pem" /></div>
                             <button class="tool-btn primary" id="saveCertBtn">保存证书设置</button>
                             <span id="certStatus"></span>
                         </div>
                     </div>
-
                     <div class="setting-group">
                         <h3>🖼️ 登录背景</h3>
                         <p class="setting-desc">支持 HTTPS 图片链接或上传本地图片</p>
@@ -142,7 +112,6 @@
                             <button class="tool-btn danger" id="removeBgBtn">移除背景</button>
                         </div>
                     </div>
-
                     <div class="setting-group">
                         <h3>🖼️ 网站图标 (Favicon)</h3>
                         <p class="setting-desc">上传 .ico 或 .png 图片，刷新浏览器后生效</p>
@@ -157,7 +126,6 @@
         </div>
     </div>
 
-    <!-- 列管理弹窗 -->
     <div class="modal-overlay" id="columnModal">
         <div class="modal">
             <div class="modal-header">
@@ -184,7 +152,6 @@
         </div>
     </div>
 
-    <!-- 导入弹窗 -->
     <div class="modal-overlay" id="importModal">
         <div class="modal modal-sm">
             <div class="modal-header">
@@ -203,7 +170,6 @@
         </div>
     </div>
 
-    <!-- 地址后缀弹窗 -->
     <div class="modal-overlay" id="addressSuffixModal">
         <div class="modal modal-sm">
             <div class="modal-header">
@@ -212,14 +178,8 @@
             </div>
             <div class="modal-body">
                 <div class="suffix-setting">
-                    <div class="input-group">
-                        <label>IP地址后缀 (如 :666)</label>
-                        <input type="text" id="ipPortSuffixInput" placeholder=":666" />
-                    </div>
-                    <div class="input-group">
-                        <label>域名后缀 (如 :666/666)</label>
-                        <input type="text" id="domainPortSuffixInput" placeholder=":666/666" />
-                    </div>
+                    <div class="input-group"><label>IP地址后缀 (如 :666)</label><input type="text" id="ipPortSuffixInput" placeholder=":666" /></div>
+                    <div class="input-group"><label>域名后缀 (如 :666/666)</label><input type="text" id="domainPortSuffixInput" placeholder=":666/666" /></div>
                     <button class="tool-btn primary" id="saveSuffixBtn">保存后缀设置</button>
                     <span id="suffixStatus"></span>
                 </div>
