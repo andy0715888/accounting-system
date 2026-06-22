@@ -671,10 +671,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 const colKey = e.target.dataset.col;
                 const panel = document.querySelector(`.col-dropdown-panel[data-col="${colKey}"]`);
                 if (!panel) return;
-                const allValues = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox)')).map(cb => cb.value);
-                const checkedValues = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox):checked')).map(cb => cb.value);
-                if (checkedValues.length === allValues.length) delete state.filters[colKey];
-                else state.filters[colKey] = checkedValues;
+                const searchInput = panel.querySelector('.filter-search');
+                const searchText = searchInput ? searchInput.value.trim() : '';
+                const allCbs = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox)'));
+                const allValues = allCbs.map(cb => cb.value);
+
+                let checkedValues;
+                if (searchText === '') {
+                    // 无搜索：直接读全部勾选状态
+                    checkedValues = allCbs.filter(cb => cb.checked).map(cb => cb.value);
+                } else {
+                    // 有搜索：可见且勾选的值生效，不可见的保留原有筛选状态（不覆盖）
+                    const visibleCbs = allCbs.filter(cb => {
+                        const label = cb.closest('.filter-option-label');
+                        return label && label.style.display !== 'none';
+                    });
+                    const visibleValues = visibleCbs.map(cb => cb.value);
+                    const visibleChecked = visibleCbs.filter(cb => cb.checked).map(cb => cb.value);
+                    // 原有筛选中不在当前搜索结果里的值保持不变，加上当前搜索结果里勾选的值
+                    const prevFilter = isFilterActive(colKey) ? state.filters[colKey] : allValues;
+                    const keptFromPrev = prevFilter.filter(v => !visibleValues.includes(v));
+                    checkedValues = [...keptFromPrev, ...visibleChecked];
+                }
+
+                if (checkedValues.length === 0 || checkedValues.length === allValues.length) {
+                    delete state.filters[colKey];
+                } else {
+                    state.filters[colKey] = checkedValues;
+                }
                 panel.classList.remove('show');
                 renderTable(false);
                 return;
