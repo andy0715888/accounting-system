@@ -84,6 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     initMenu();
 
+    // --- 时间 ---
     function updateClock() {
         const now = new Date();
         const weekdays = ['日','一','二','三','四','五','六'];
@@ -92,6 +93,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateClock, 10000);
     updateClock();
 
+    // --- 工具函数 ---
     function setStatus(msg) { statusText.textContent = msg; }
     function formatDate(d) {
         if (!d) return '';
@@ -892,10 +894,10 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 支出交互
+        // 支出交互（点击切换编辑）
         $$('.expense-display').forEach(display => {
             display.addEventListener('click', function(e) {
-                const parent = this.parentElement;
+                const parent = this.parentElement; // .expense-inline
                 const input = parent.querySelector('.expense-input');
                 const td = parent.closest('td');
                 this.style.display = 'none';
@@ -935,10 +937,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             input.addEventListener('blur', finishEditing);
             input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    finishEditing();
-                }
+                if (e.key === 'Enter') { e.preventDefault(); finishEditing(); }
                 if (e.key === 'Escape') {
                     const parent = input.closest('.expense-inline');
                     const display = parent.querySelector('.expense-display');
@@ -950,14 +949,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.blur();
                 }
             });
-            input.addEventListener('focus', function() {
-                const td = this.closest('td');
-                if (td) td.classList.add('editing-cell');
-            });
-            input.addEventListener('blur', function() {
-                const td = this.closest('td');
-                if (td) td.classList.remove('editing-cell');
-            });
+            input.addEventListener('focus', function() { const td = this.closest('td'); if (td) td.classList.add('editing-cell'); });
+            input.addEventListener('blur', function() { const td = this.closest('td'); if (td) td.classList.remove('editing-cell'); });
         });
 
         // 收入交互
@@ -1004,10 +997,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             input.addEventListener('blur', finishEditing);
             input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    finishEditing();
-                }
+                if (e.key === 'Enter') { e.preventDefault(); finishEditing(); }
                 if (e.key === 'Escape') {
                     const parent = input.closest('.fee-control');
                     const display = parent.querySelector('.fee-display');
@@ -1019,14 +1009,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.blur();
                 }
             });
-            input.addEventListener('focus', function() {
-                const td = this.closest('td');
-                if (td) td.classList.add('editing-cell');
-            });
-            input.addEventListener('blur', function() {
-                const td = this.closest('td');
-                if (td) td.classList.remove('editing-cell');
-            });
+            input.addEventListener('focus', function() { const td = this.closest('td'); if (td) td.classList.add('editing-cell'); });
+            input.addEventListener('blur', function() { const td = this.closest('td'); if (td) td.classList.remove('editing-cell'); });
         });
     }
 
@@ -1431,7 +1415,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.post('/auth/change-password', { oldPassword: oldPwd, newPassword: newPwd });
             changePwdStatus.textContent = '✅ 密码修改成功';
             oldPwdInput.value = ''; newPwdInput.value = ''; confirmPwdInput.value = '';
-        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message); }
+        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
     }
 
     // --- 注册开关 ---
@@ -1447,7 +1431,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.post('/settings', { key: 'allow_register', value });
             registerSwitchStatus.textContent = '✅ 已保存';
             setTimeout(() => registerSwitchStatus.textContent = '', 3000);
-        } catch (err) { registerSwitchStatus.textContent = '❌ 保存失败: ' + err.message); }
+        } catch (err) { registerSwitchStatus.textContent = '❌ 保存失败: ' + err.message; }
     }
 
     // --- 地址后缀 ---
@@ -1492,7 +1476,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (link) link.href = data.url + '?v=' + Date.now();
                 } else { document.getElementById('faviconStatus').textContent = '❌ 保存图标失败: ' + (result.error || ''); }
             } else { document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + (data.error || ''); }
-        } catch (err) { document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + err.message); }
+        } catch (err) { document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + err.message; }
     }
 
     // --- 加载设置 ---
