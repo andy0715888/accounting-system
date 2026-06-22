@@ -84,7 +84,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     initMenu();
 
-    // --- 时间 ---
     function updateClock() {
         const now = new Date();
         const weekdays = ['日','一','二','三','四','五','六'];
@@ -93,7 +92,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateClock, 10000);
     updateClock();
 
-    // --- 工具函数 ---
     function setStatus(msg) { statusText.textContent = msg; }
     function formatDate(d) {
         if (!d) return '';
@@ -894,7 +892,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 支出交互（点击切换编辑）
+        // 支出交互（点击显示文字切换为编辑）
         $$('.expense-display').forEach(display => {
             display.addEventListener('click', function(e) {
                 const parent = this.parentElement; // .expense-inline
@@ -937,7 +935,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             input.addEventListener('blur', finishEditing);
             input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') { e.preventDefault(); finishEditing(); }
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    finishEditing();
+                }
                 if (e.key === 'Escape') {
                     const parent = input.closest('.expense-inline');
                     const display = parent.querySelector('.expense-display');
@@ -949,11 +950,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.blur();
                 }
             });
-            input.addEventListener('focus', function() { const td = this.closest('td'); if (td) td.classList.add('editing-cell'); });
-            input.addEventListener('blur', function() { const td = this.closest('td'); if (td) td.classList.remove('editing-cell'); });
+            input.addEventListener('focus', function() {
+                const td = this.closest('td');
+                if (td) {
+                    td.classList.add('editing-cell');
+                }
+            });
+            input.addEventListener('blur', function() {
+                const td = this.closest('td');
+                if (td) td.classList.remove('editing-cell');
+            });
         });
 
-        // 收入交互
+        // 收入交互（同样处理）
         $$('.fee-display').forEach(display => {
             display.addEventListener('click', function(e) {
                 const parent = this.parentElement;
@@ -997,7 +1006,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             input.addEventListener('blur', finishEditing);
             input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') { e.preventDefault(); finishEditing(); }
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    finishEditing();
+                }
                 if (e.key === 'Escape') {
                     const parent = input.closest('.fee-control');
                     const display = parent.querySelector('.fee-display');
@@ -1009,8 +1021,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.blur();
                 }
             });
-            input.addEventListener('focus', function() { const td = this.closest('td'); if (td) td.classList.add('editing-cell'); });
-            input.addEventListener('blur', function() { const td = this.closest('td'); if (td) td.classList.remove('editing-cell'); });
+            input.addEventListener('focus', function() {
+                const td = this.closest('td');
+                if (td) td.classList.add('editing-cell');
+            });
+            input.addEventListener('blur', function() {
+                const td = this.closest('td');
+                if (td) td.classList.remove('editing-cell');
+            });
         });
     }
 
