@@ -348,19 +348,20 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* 可编辑单元格添加相对定位，以便输入框绝对定位 */
+/* 可编辑单元格添加相对定位 */
 #dataTable td.editable-td {
     position: relative;
 }
-/* 编辑时输入框绝对定位，水平垂直居中，宽度自适应 */
+/* 编辑时输入框绝对定位，宽度固定30字符 */
 #dataTable td.editing-cell .expense-input,
 #dataTable td.editing-cell .fee-input {
     position: absolute;
     left: 0;
     top: 50%;
     transform: translateY(-50%);
-    width: max-content;
-    min-width: 100%;
+    width: 30ch;
+    min-width: 30ch;
+    max-width: none;
     z-index: 10;
     background: #fff;
     border: 1px solid #4a6cf7;
@@ -456,7 +457,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    position: static; /* 不参与定位 */
 }
 .expense-display {
     cursor: pointer;
@@ -468,7 +468,7 @@ body {
 }
 .expense-display:hover { background: #f0f2f5; }
 .expense-input {
-    width: 100% !important; /* 默认 */
+    width: 100% !important;
 }
 .expense-input[type="number"]::-webkit-outer-spin-button,
 .expense-input[type="number"]::-webkit-inner-spin-button {
@@ -484,7 +484,6 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    position: static;
 }
 .fee-display {
     cursor: pointer;
