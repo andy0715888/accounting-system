@@ -352,7 +352,7 @@ body {
 #dataTable td.editable-td {
     position: relative;
 }
-/* 编辑时输入框绝对定位，宽度固定30字符 */
+/* 编辑时输入框绝对定位，宽度固定为30个字符，垂直居中 */
 #dataTable td.editing-cell .expense-input,
 #dataTable td.editing-cell .fee-input {
     position: absolute;
@@ -470,14 +470,6 @@ body {
 .expense-input {
     width: 100% !important;
 }
-.expense-input[type="number"]::-webkit-outer-spin-button,
-.expense-input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-.expense-input[type="number"] {
-    -moz-appearance: textfield;
-}
 
 /* 收入列控件 */
 .fee-control {
@@ -546,9 +538,6 @@ body {
     width: 14px;
     height: 14px;
     opacity: 0.8;
-}
-.date-control input[type="date"] {
-    -moz-appearance: textfield;
 }
 
 /* 状态栏 */
