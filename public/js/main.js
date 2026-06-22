@@ -84,7 +84,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     initMenu();
 
-    // --- 时间 ---
     function updateClock() {
         const now = new Date();
         const weekdays = ['日','一','二','三','四','五','六'];
@@ -93,7 +92,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateClock, 10000);
     updateClock();
 
-    // --- 工具函数 ---
     function setStatus(msg) { statusText.textContent = msg; }
     function formatDate(d) {
         if (!d) return '';
@@ -118,7 +116,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.ceil(ctx.measureText(text).width);
     }
 
-    // 获取显示值
     function getDisplayValue(record, col) {
         if (!record || !col) return '';
         const colKey = col.col_key;
@@ -141,7 +138,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 收入计算
     function computeFeeValue(raw) {
         if (!raw && raw !== 0) return '';
         const str = String(raw).trim();
@@ -154,7 +150,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return isNaN(num) ? raw : num;
     }
 
-    // 支出公式计算：格式 =单价+(额外费用表达式) 或 纯数字
     function computeExpenseValue(raw, months) {
         if (raw === null || raw === undefined) return 0;
         const str = String(raw).trim();
@@ -181,7 +176,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) { return 0; }
     }
 
-    // 计算列宽
     function calcColumnWidth(col) {
         let headerText = getColumnDisplayName(col);
         let lines = headerText.split('<br>');
@@ -192,7 +186,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         if (col.is_income === 1 || col.is_income === 2) maxHeaderWidth += 20;
         maxHeaderWidth += 8;
-
         let maxCellWidth = 0;
         state.records.forEach(record => {
             const displayVal = getDisplayValue(record, col);
@@ -257,7 +250,6 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) { return expr; }
     }
 
-    // --- API ---
     const API = {
         get: (url) => fetch('/api' + url, { credentials: 'include' }).then(r => r.json()),
         post: (url, data) => fetch('/api' + url, {
@@ -269,7 +261,6 @@ document.addEventListener('DOMContentLoaded', function() {
         delete: (url) => fetch('/api' + url, { method: 'DELETE', credentials: 'include' }).then(r => r.json())
     };
 
-    // 数据加载
     async function loadTabs() { state.tabs = await API.get('/tabs'); return state.tabs; }
     async function loadColumns(tabId) { state.columns = await API.get('/columns?tabId=' + tabId); return state.columns; }
     async function loadRecords(tabId) {
@@ -309,7 +300,6 @@ document.addEventListener('DOMContentLoaded', function() {
         catch (err) { setStatus('❌ 加载失败: ' + err.message); }
     }
 
-    // 标签渲染
     function renderTabs() {
         let html = '';
         state.tabs.forEach(tab => {
@@ -383,7 +373,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (name && name.trim()) createTab(name.trim());
     });
 
-    // 筛选辅助
     function normalizeFilterValue(value) {
         if (value === null || value === undefined || String(value).trim() === '') return '(空白)';
         return String(value).trim();
@@ -548,7 +537,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 筛选面板动态生成 ---
+    // --- 筛选面板动态生成（完整保留） ---
     function getOrCreateFilterPanel(colKey) {
         let panel = document.querySelector(`.col-dropdown-panel[data-col="${colKey}"]`);
         if (!panel) {
@@ -903,7 +892,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 支出交互
+        // 支出交互（点击显示文字切换为编辑）
         $$('.expense-display').forEach(display => {
             display.addEventListener('click', function(e) {
                 const parent = this.parentElement; // .expense-inline
@@ -963,7 +952,9 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             input.addEventListener('focus', function() {
                 const td = this.closest('td');
-                if (td) td.classList.add('editing-cell');
+                if (td) {
+                    td.classList.add('editing-cell');
+                }
             });
             input.addEventListener('blur', function() {
                 const td = this.closest('td');
@@ -971,7 +962,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 收入交互
+        // 收入交互（同样处理）
         $$('.fee-display').forEach(display => {
             display.addEventListener('click', function(e) {
                 const parent = this.parentElement;
@@ -1136,7 +1127,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
-    // 导出/导入
+    // 导出/导入（保留原样，完整代码中已包含）
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
