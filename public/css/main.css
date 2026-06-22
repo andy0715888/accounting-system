@@ -348,11 +348,26 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* 编辑时允许溢出，避免裁剪输入框 */
-#dataTable td.editing-cell {
-    overflow: visible;
-    z-index: 5;
+/* 可编辑单元格添加相对定位，以便输入框绝对定位 */
+#dataTable td.editable-td {
     position: relative;
+}
+/* 编辑时输入框绝对定位，水平垂直居中，宽度自适应 */
+#dataTable td.editing-cell .expense-input,
+#dataTable td.editing-cell .fee-input {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: max-content;
+    min-width: 100%;
+    z-index: 10;
+    background: #fff;
+    border: 1px solid #4a6cf7;
+    padding: 4px 6px;
+    box-shadow: 0 0 4px rgba(0,0,0,0.15);
+    white-space: nowrap;
+    text-align: left;
 }
 #dataTable td .cell-input {
     width: 100%;
@@ -441,6 +456,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: static; /* 不参与定位 */
 }
 .expense-display {
     cursor: pointer;
@@ -452,9 +468,7 @@ body {
 }
 .expense-display:hover { background: #f0f2f5; }
 .expense-input {
-    width: auto !important;
-    min-width: 60px;
-    max-width: none;
+    width: 100% !important; /* 默认 */
 }
 .expense-input[type="number"]::-webkit-outer-spin-button,
 .expense-input[type="number"]::-webkit-inner-spin-button {
@@ -470,6 +484,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: static;
 }
 .fee-display {
     cursor: pointer;
@@ -481,9 +496,7 @@ body {
 }
 .fee-display:hover { background: #f0f2f5; }
 .fee-input {
-    width: auto !important;
-    min-width: 60px;
-    max-width: none;
+    width: 100% !important;
 }
 
 /* 地址控件 */
@@ -512,7 +525,7 @@ body {
 }
 .address-control .open-link:hover { background:#3a5cd7; }
 
-/* 日期控件（极致紧凑） */
+/* 日期控件 */
 .date-control {
     display: inline-block;
     text-align: center;
