@@ -150,19 +150,23 @@ document.addEventListener('DOMContentLoaded', function() {
         return isNaN(num) ? raw : num;
     }
 
+    // 修正后的支出计算：支持 =50 或 =50+(20) 或 纯数字
     function computeExpenseValue(raw, months) {
         if (raw === null || raw === undefined) return 0;
         const str = String(raw).trim();
         const m = months || 0;
-        const match = str.match(/^=(\d+(?:\.\d+)?)\+\((.+)\)$/);
+        // 匹配 =单价 或 =单价+(额外表达式)
+        const match = str.match(/^=(\d+(?:\.\d+)?)(?:\+\((.+)\))?$/);
         if (match) {
             const unitPrice = parseFloat(match[1]) || 0;
             const extraExpr = match[2];
-            const extra = safeEval(extraExpr);
+            const extra = extraExpr ? safeEval(extraExpr) : 0;
             return m * unitPrice + extra;
         }
+        // 纯数字
         const num = parseFloat(str);
         if (!isNaN(num)) return m * num;
+        // 其他
         return safeEval(str);
     }
 
@@ -952,9 +956,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             input.addEventListener('focus', function() {
                 const td = this.closest('td');
-                if (td) {
-                    td.classList.add('editing-cell');
-                }
+                if (td) td.classList.add('editing-cell');
             });
             input.addEventListener('blur', function() {
                 const td = this.closest('td');
