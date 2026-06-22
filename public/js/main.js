@@ -569,7 +569,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function refreshFilterPanelContent(panel, colKey) {
         const options = state.filterOptions[colKey] || [];
         const optionsHtml = options.map(opt => `
-            <label class="filter-option-label" data-filter-label="${escapeHtml(String(opt.value).toLowerCase())}">
+            <label class="filter-option-label" data-filter-label="${escapeHtml(String(opt.value).toLowerCase())}" style="display:flex;">
                 <input type="checkbox" class="filter-option" data-col="${escapeAttr(colKey)}" value="${escapeAttr(opt.value)}" />
                 <span class="filter-option-text">${escapeHtml(opt.value)}</span>
                 <span class="filter-count">(${opt.count})</span>
@@ -577,7 +577,7 @@ document.addEventListener('DOMContentLoaded', function() {
         `).join('');
 
         const allHtml = `
-            <label class="filter-option-label filter-select-all">
+            <label class="filter-option-label filter-select-all" style="display:flex;">
                 <input type="checkbox" class="filter-select-all-checkbox" data-col="${escapeAttr(colKey)}" /> <span class="filter-option-text">全选</span>
             </label>
             ${optionsHtml}
@@ -610,6 +610,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function getVisibleFilterOptions(panel) {
+        // 返回所有当前可见（display不是'none'）且不是全选行的复选框
         return Array.from(panel.querySelectorAll('.filter-option-label'))
             .filter(label => label.style.display !== 'none' && !label.classList.contains('filter-select-all'))
             .map(label => label.querySelector('.filter-option'))
@@ -635,9 +636,9 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateFilterSummary(panel) {
         const summary = panel.querySelector('.filter-summary');
         if (!summary) return;
-        const allOptions = panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox)');
-        const checkedCount = panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox):checked').length;
-        summary.textContent = `已选 ${checkedCount} / ${allOptions.length}`;
+        const visibleOptions = getVisibleFilterOptions(panel);
+        const checkedCount = visibleOptions.filter(opt => opt.checked).length;
+        summary.textContent = `已选 ${checkedCount} / ${visibleOptions.length}`;
     }
 
     function bindFilterEvents() {
@@ -653,9 +654,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 closeFilterPanels();
                 if (!isOpen) {
                     refreshFilterPanelContent(panel, colKey);
+                    // 重置搜索输入框
+                    const search = panel.querySelector('.filter-search');
+                    if (search) search.value = '';
+                    // 确保所有选项可见
+                    panel.querySelectorAll('.filter-option-label').forEach(label => label.style.display = 'flex');
+                    panel.querySelector('.filter-select-all').style.display = 'flex';
                     positionFilterPanel(panel, colKey);
                     panel.classList.add('show');
-                    const search = panel.querySelector('.filter-search');
                     if (search) setTimeout(() => search.focus(), 0);
                 }
                 return;
@@ -669,10 +675,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 const colKey = e.target.dataset.col;
                 const panel = document.querySelector(`.col-dropdown-panel[data-col="${colKey}"]`);
                 if (!panel) return;
-                const allValues = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox)')).map(cb => cb.value);
-                const checkedValues = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox):checked')).map(cb => cb.value);
-                if (checkedValues.length === allValues.length) delete state.filters[colKey];
-                else state.filters[colKey] = checkedValues;
+
+                // 关键修复：只收集当前可见的选项值
+                const visibleOptions = getVisibleFilterOptions(panel);
+                const visibleValues = visibleOptions.map(opt => opt.value);
+                const checkedValues = visibleOptions.filter(opt => opt.checked).map(opt => opt.value);
+
+                // 如果全选（所有可见项都被选中），则移除筛选
+                if (checkedValues.length === visibleValues.length) {
+                    delete state.filters[colKey];
+                } else {
+                    state.filters[colKey] = checkedValues;
+                }
                 panel.classList.remove('show');
                 renderTable(false);
                 return;
@@ -705,28 +719,23 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // 修复搜索过滤：使用 style.display 控制显隐
+        // 搜索过滤：使用 style.display 控制显隐
         document.body.addEventListener('input', function(e) {
             if (e.target.classList.contains('filter-search')) {
                 const panel = e.target.closest('.col-dropdown-panel');
                 if (!panel) return;
                 const searchText = e.target.value.trim().toLowerCase();
                 const labels = panel.querySelectorAll('.filter-option-label:not(.filter-select-all)');
-                let anyVisible = false;
                 labels.forEach(label => {
                     const text = (label.dataset.filterLabel || '').toLowerCase();
-                    if (searchText === '' || text.includes(searchText)) {
-                        label.style.display = 'flex';
-                        anyVisible = true;
-                    } else {
-                        label.style.display = 'none';
-                    }
+                    label.style.display = (searchText === '' || text.includes(searchText)) ? 'flex' : 'none';
                 });
                 // 全选行：有搜索文字时隐藏
                 const selectAllLabel = panel.querySelector('.filter-select-all');
                 if (selectAllLabel) {
                     selectAllLabel.style.display = searchText === '' ? 'flex' : 'none';
                 }
+                // 更新全选框状态
                 updateSelectAllCheckbox(panel);
             }
         });
