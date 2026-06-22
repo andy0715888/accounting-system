@@ -348,7 +348,6 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* 可编辑单元格 */
 #dataTable td.editable-td {
     position: relative;
 }
