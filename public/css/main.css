@@ -430,39 +430,47 @@ body {
     -moz-appearance: textfield;
 }
 
-/* 支出列内联布局 */
+/* 支出列样式 */
 .expense-inline {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
+    position: relative;
 }
+.expense-display {
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background 0.15s;
+    min-width: 30px;
+    text-align: center;
+}
+.expense-display:hover { background: #f0f2f5; }
 .expense-input {
-    width: 45px !important;
+    width: auto !important;
+    min-width: 60px;
+    text-align: left !important;
 }
-.expense-result {
-    font-weight: bold;
-    font-size: 13px;
-    white-space: nowrap;
-}
-.expense-input[type="number"]::-webkit-outer-spin-button,
-.expense-input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-.expense-input[type="number"] {
-    -moz-appearance: textfield;
+.expense-input.editing-wide,
+.fee-input.editing-wide {
+    position: absolute;
+    left: 0;
+    top: 0;
+    min-width: 200px;
+    width: max-content !important;
+    z-index: 5;
+    background: #fff;
+    border: 1px solid #4a6cf7;
+    padding: 4px 6px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.1);
 }
 
-/* 收入列控件 */
+/* 收入列样式 */
 .fee-control {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
 }
 .fee-display {
     cursor: pointer;
@@ -474,8 +482,9 @@ body {
 }
 .fee-display:hover { background: #f0f2f5; }
 .fee-input {
-    width: 100% !important;
+    width: auto !important;
     min-width: 60px;
+    text-align: left !important;
 }
 
 /* 地址控件 */
@@ -504,13 +513,13 @@ body {
 }
 .address-control .open-link:hover { background:#3a5cd7; }
 
-/* 日期控件（极致紧凑，消除右侧图标多余间距） */
+/* 日期控件 */
 .date-control {
     display: inline-block;
     text-align: center;
 }
 .date-control input[type="date"] {
-    padding: 0 2px 0 2px;        /* 极小的左右内边距 */
+    padding: 0 2px 0 2px;
     border: 1px solid #dcdfe6;
     border-radius: 4px;
     font-size: 12px;
@@ -520,7 +529,6 @@ body {
     color: #333;
     background: #fff;
 }
-/* 针对Webkit浏览器调整日历图标的大小和间距 */
 .date-control input[type="date"]::-webkit-calendar-picker-indicator {
     margin: 0;
     padding: 0;
@@ -528,7 +536,6 @@ body {
     height: 14px;
     opacity: 0.8;
 }
-/* Firefox */
 .date-control input[type="date"] {
     -moz-appearance: textfield;
 }
