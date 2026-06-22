@@ -348,18 +348,23 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* 可编辑单元格添加相对定位 */
+/* 可编辑单元格添加相对定位，以便输入框绝对定位 */
 #dataTable td.editable-td {
     position: relative;
 }
-/* 编辑时输入框绝对定位，宽度固定为30个字符，垂直居中 */
+/* 编辑时溢出可见，且 z-index 提升 */
+#dataTable td.editing-cell {
+    overflow: visible;
+    z-index: 5;
+}
+/* 编辑时输入框绝对定位，宽度固定为30ch，垂直居中，最上层 */
 #dataTable td.editing-cell .expense-input,
 #dataTable td.editing-cell .fee-input {
     position: absolute;
     left: 0;
     top: 50%;
     transform: translateY(-50%);
-    width: 30ch;
+    width: 30ch;            /* 30个字符宽度 */
     min-width: 30ch;
     max-width: none;
     z-index: 10;
@@ -452,7 +457,7 @@ body {
     -moz-appearance: textfield;
 }
 
-/* 支出列内联布局 */
+/* 支出列内联布局（默认） */
 .expense-inline {
     display: flex;
     align-items: center;
@@ -469,6 +474,14 @@ body {
 .expense-display:hover { background: #f0f2f5; }
 .expense-input {
     width: 100% !important;
+}
+.expense-input[type="number"]::-webkit-outer-spin-button,
+.expense-input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.expense-input[type="number"] {
+    -moz-appearance: textfield;
 }
 
 /* 收入列控件 */
@@ -538,6 +551,9 @@ body {
     width: 14px;
     height: 14px;
     opacity: 0.8;
+}
+.date-control input[type="date"] {
+    -moz-appearance: textfield;
 }
 
 /* 状态栏 */
