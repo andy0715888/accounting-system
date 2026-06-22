@@ -150,7 +150,6 @@ document.addEventListener('DOMContentLoaded', function() {
         return isNaN(num) ? raw : num;
     }
 
-    // 修正后的支出计算：支持 =50 或 =50+(20) 或 纯数字
     function computeExpenseValue(raw, months) {
         if (raw === null || raw === undefined) return 0;
         const str = String(raw).trim();
@@ -665,14 +664,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 closeFilterPanels();
             }
 
+            // 修改后的“确定”按钮：基于可见选项进行筛选
             if (e.target.classList.contains('filter-ok')) {
                 const colKey = e.target.dataset.col;
                 const panel = document.querySelector(`.col-dropdown-panel[data-col="${colKey}"]`);
                 if (!panel) return;
-                const allValues = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox)')).map(cb => cb.value);
-                const checkedValues = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox):checked')).map(cb => cb.value);
-                if (checkedValues.length === allValues.length) delete state.filters[colKey];
-                else state.filters[colKey] = checkedValues;
+                const visibleOptions = getVisibleFilterOptions(panel);
+                const visibleValues = visibleOptions.map(cb => cb.value);
+                const checkedValues = visibleOptions.filter(cb => cb.checked).map(cb => cb.value);
+
+                // 如果可见选项全部勾选，等同于全选（清除该列筛选）
+                if (checkedValues.length === visibleValues.length) {
+                    delete state.filters[colKey];
+                } else if (checkedValues.length > 0) {
+                    state.filters[colKey] = checkedValues;
+                } else {
+                    delete state.filters[colKey];
+                }
                 panel.classList.remove('show');
                 renderTable(false);
                 return;
@@ -705,7 +713,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // 修复搜索过滤：使用 style.display 控制显隐
+        // 搜索过滤
         document.body.addEventListener('input', function(e) {
             if (e.target.classList.contains('filter-search')) {
                 const panel = e.target.closest('.col-dropdown-panel');
@@ -722,7 +730,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         label.style.display = 'none';
                     }
                 });
-                // 全选行：有搜索文字时隐藏
                 const selectAllLabel = panel.querySelector('.filter-select-all');
                 if (selectAllLabel) {
                     selectAllLabel.style.display = searchText === '' ? 'flex' : 'none';
