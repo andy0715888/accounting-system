@@ -681,20 +681,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     // 无搜索：直接读全部勾选状态
                     checkedValues = allCbs.filter(cb => cb.checked).map(cb => cb.value);
                 } else {
-                    // 有搜索：可见且勾选的值生效，不可见的保留原有筛选状态（不覆盖）
+                    // 有搜索关键字时：只把【当前可见且勾选】的值作为筛选结果
+                    // 不合并隐藏项，用户搜索后勾选什么就只显示什么
                     const visibleCbs = allCbs.filter(cb => {
                         const label = cb.closest('.filter-option-label');
                         return label && label.style.display !== 'none';
                     });
-                    const visibleValues = visibleCbs.map(cb => cb.value);
-                    const visibleChecked = visibleCbs.filter(cb => cb.checked).map(cb => cb.value);
-                    // 原有筛选中不在当前搜索结果里的值保持不变，加上当前搜索结果里勾选的值
-                    const prevFilter = isFilterActive(colKey) ? state.filters[colKey] : allValues;
-                    const keptFromPrev = prevFilter.filter(v => !visibleValues.includes(v));
-                    checkedValues = [...keptFromPrev, ...visibleChecked];
+                    checkedValues = visibleCbs.filter(cb => cb.checked).map(cb => cb.value);
                 }
 
-                if (checkedValues.length === 0 || checkedValues.length === allValues.length) {
+                if (checkedValues.length === 0) {
+                    // 没有选中任何项，不做筛选（清除该列筛选）
+                    delete state.filters[colKey];
+                } else if (checkedValues.length === allValues.length) {
+                    // 全部都选了，等于没有筛选
                     delete state.filters[colKey];
                 } else {
                     state.filters[colKey] = checkedValues;
