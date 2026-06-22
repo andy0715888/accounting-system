@@ -1452,7 +1452,7 @@ document.addEventListener('DOMContentLoaded', function() {
             state.ipPortSuffix = ipSuffix; state.domainPortSuffix = domainSuffix;
             suffixStatus.textContent = '✅ 已保存';
             setTimeout(() => suffixStatus.textContent = '', 3000);
-        } catch (err) { suffixStatus.textContent = '❌ 保存失败: ' + err.message); }
+        } catch (err) { suffixStatus.textContent = '❌ 保存失败: ' + err.message; }
     }
 
     // --- Favicon ---
