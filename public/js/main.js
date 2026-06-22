@@ -150,6 +150,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return isNaN(num) ? raw : num;
     }
 
+    // 修正后的支出计算：支持 =50 或 =50+(20) 或 纯数字
     function computeExpenseValue(raw, months) {
         if (raw === null || raw === undefined) return 0;
         const str = String(raw).trim();
@@ -631,12 +632,14 @@ document.addEventListener('DOMContentLoaded', function() {
         updateFilterSummary(panel);
     }
 
+    // 修正后的计数：基于可见选项
     function updateFilterSummary(panel) {
         const summary = panel.querySelector('.filter-summary');
         if (!summary) return;
-        const allOptions = panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox)');
-        const checkedCount = panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox):checked').length;
-        summary.textContent = `已选 ${checkedCount} / ${allOptions.length}`;
+        const visibleOptions = getVisibleFilterOptions(panel);
+        const total = visibleOptions.length;
+        const checked = visibleOptions.filter(opt => opt.checked).length;
+        summary.textContent = `已选 ${checked} / ${total}`;
     }
 
     function bindFilterEvents() {
@@ -664,23 +667,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 closeFilterPanels();
             }
 
-            // 修改后的“确定”按钮：基于可见选项进行筛选
             if (e.target.classList.contains('filter-ok')) {
                 const colKey = e.target.dataset.col;
                 const panel = document.querySelector(`.col-dropdown-panel[data-col="${colKey}"]`);
                 if (!panel) return;
-                const visibleOptions = getVisibleFilterOptions(panel);
-                const visibleValues = visibleOptions.map(cb => cb.value);
-                const checkedValues = visibleOptions.filter(cb => cb.checked).map(cb => cb.value);
-
-                // 如果可见选项全部勾选，等同于全选（清除该列筛选）
-                if (checkedValues.length === visibleValues.length) {
-                    delete state.filters[colKey];
-                } else if (checkedValues.length > 0) {
-                    state.filters[colKey] = checkedValues;
-                } else {
-                    delete state.filters[colKey];
-                }
+                const allValues = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox)')).map(cb => cb.value);
+                const checkedValues = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox):checked')).map(cb => cb.value);
+                if (checkedValues.length === allValues.length) delete state.filters[colKey];
+                else state.filters[colKey] = checkedValues;
                 panel.classList.remove('show');
                 renderTable(false);
                 return;
@@ -720,12 +714,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!panel) return;
                 const searchText = e.target.value.trim().toLowerCase();
                 const labels = panel.querySelectorAll('.filter-option-label:not(.filter-select-all)');
-                let anyVisible = false;
                 labels.forEach(label => {
                     const text = (label.dataset.filterLabel || '').toLowerCase();
                     if (searchText === '' || text.includes(searchText)) {
                         label.style.display = 'flex';
-                        anyVisible = true;
                     } else {
                         label.style.display = 'none';
                     }
