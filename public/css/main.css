@@ -348,23 +348,22 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-/* 可编辑单元格添加相对定位，以便输入框绝对定位 */
+/* 可编辑单元格 */
 #dataTable td.editable-td {
     position: relative;
 }
-/* 编辑时溢出可见，且 z-index 提升 */
 #dataTable td.editing-cell {
     overflow: visible;
     z-index: 5;
 }
-/* 编辑时输入框绝对定位，宽度固定为30ch，垂直居中，最上层 */
+/* 编辑时输入框：30ch宽度，水平垂直居中，最上层 */
 #dataTable td.editing-cell .expense-input,
 #dataTable td.editing-cell .fee-input {
     position: absolute;
-    left: 0;
+    left: 50%;
     top: 50%;
-    transform: translateY(-50%);
-    width: 30ch;            /* 30个字符宽度 */
+    transform: translate(-50%, -50%);
+    width: 30ch;
     min-width: 30ch;
     max-width: none;
     z-index: 10;
@@ -457,7 +456,7 @@ body {
     -moz-appearance: textfield;
 }
 
-/* 支出列内联布局（默认） */
+/* 支出列内联布局 */
 .expense-inline {
     display: flex;
     align-items: center;
