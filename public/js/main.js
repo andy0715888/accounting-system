@@ -155,7 +155,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (raw === null || raw === undefined) return 0;
         const str = String(raw).trim();
         const m = months || 0;
-        // 匹配 =单价 或 =单价+(额外表达式)
         const match = str.match(/^=(\d+(?:\.\d+)?)(?:\+\((.+)\))?$/);
         if (match) {
             const unitPrice = parseFloat(match[1]) || 0;
@@ -163,10 +162,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const extra = extraExpr ? safeEval(extraExpr) : 0;
             return m * unitPrice + extra;
         }
-        // 纯数字
         const num = parseFloat(str);
         if (!isNaN(num)) return m * num;
-        // 其他
         return safeEval(str);
     }
 
@@ -614,7 +611,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function getVisibleFilterOptions(panel) {
         return Array.from(panel.querySelectorAll('.filter-option-label'))
-            .filter(label => !label.hidden && !label.classList.contains('filter-select-all'))
+            .filter(label => label.style.display !== 'none' && !label.classList.contains('filter-select-all'))
             .map(label => label.querySelector('.filter-option'))
             .filter(Boolean);
     }
@@ -708,15 +705,28 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
+        // 修复搜索过滤：使用 style.display 控制显隐
         document.body.addEventListener('input', function(e) {
             if (e.target.classList.contains('filter-search')) {
                 const panel = e.target.closest('.col-dropdown-panel');
+                if (!panel) return;
                 const searchText = e.target.value.trim().toLowerCase();
-                panel.querySelectorAll('.filter-option-label:not(.filter-select-all)').forEach(label => {
-                    label.hidden = searchText !== '' && !(label.dataset.filterLabel || '').includes(searchText);
+                const labels = panel.querySelectorAll('.filter-option-label:not(.filter-select-all)');
+                let anyVisible = false;
+                labels.forEach(label => {
+                    const text = (label.dataset.filterLabel || '').toLowerCase();
+                    if (searchText === '' || text.includes(searchText)) {
+                        label.style.display = 'flex';
+                        anyVisible = true;
+                    } else {
+                        label.style.display = 'none';
+                    }
                 });
+                // 全选行：有搜索文字时隐藏
                 const selectAllLabel = panel.querySelector('.filter-select-all');
-                if (selectAllLabel) selectAllLabel.hidden = searchText !== '';
+                if (selectAllLabel) {
+                    selectAllLabel.style.display = searchText === '' ? 'flex' : 'none';
+                }
                 updateSelectAllCheckbox(panel);
             }
         });
