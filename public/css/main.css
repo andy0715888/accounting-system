@@ -348,6 +348,12 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* 编辑时允许溢出，避免裁剪输入框 */
+#dataTable td.editing-cell {
+    overflow: visible;
+    z-index: 5;
+    position: relative;
+}
 #dataTable td .cell-input {
     width: 100%;
     border: 1px solid transparent;
@@ -430,12 +436,11 @@ body {
     -moz-appearance: textfield;
 }
 
-/* 支出列样式 */
+/* 支出列内联布局 */
 .expense-inline {
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
 }
 .expense-display {
     cursor: pointer;
@@ -449,28 +454,22 @@ body {
 .expense-input {
     width: auto !important;
     min-width: 60px;
-    text-align: left !important;
+    max-width: none;
 }
-.expense-input.editing-wide,
-.fee-input.editing-wide {
-    position: absolute;
-    left: 0;
-    top: 0;
-    min-width: 200px;
-    width: max-content !important;
-    z-index: 5;
-    background: #fff;
-    border: 1px solid #4a6cf7;
-    padding: 4px 6px;
-    box-shadow: 0 0 5px rgba(0,0,0,0.1);
+.expense-input[type="number"]::-webkit-outer-spin-button,
+.expense-input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.expense-input[type="number"] {
+    -moz-appearance: textfield;
 }
 
-/* 收入列样式 */
+/* 收入列控件 */
 .fee-control {
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
 }
 .fee-display {
     cursor: pointer;
@@ -484,7 +483,7 @@ body {
 .fee-input {
     width: auto !important;
     min-width: 60px;
-    text-align: left !important;
+    max-width: none;
 }
 
 /* 地址控件 */
@@ -513,7 +512,7 @@ body {
 }
 .address-control .open-link:hover { background:#3a5cd7; }
 
-/* 日期控件 */
+/* 日期控件（极致紧凑） */
 .date-control {
     display: inline-block;
     text-align: center;
