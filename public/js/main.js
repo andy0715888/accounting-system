@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
         domainPortSuffix: ''
     };
 
+    // DOM 引用
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => document.querySelectorAll(sel);
     const tabBar = $('#tabBar');
@@ -83,6 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     initMenu();
 
+    // --- 时间 ---
     function updateClock() {
         const now = new Date();
         const weekdays = ['日','一','二','三','四','五','六'];
@@ -91,6 +93,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateClock, 10000);
     updateClock();
 
+    // --- 工具函数 ---
     function setStatus(msg) { statusText.textContent = msg; }
     function formatDate(d) {
         if (!d) return '';
@@ -115,6 +118,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return Math.ceil(ctx.measureText(text).width);
     }
 
+    // 获取显示值
     function getDisplayValue(record, col) {
         if (!record || !col) return '';
         const colKey = col.col_key;
@@ -137,7 +141,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 收入公式计算（已有）
+    // 收入计算
     function computeFeeValue(raw) {
         if (!raw && raw !== 0) return '';
         const str = String(raw).trim();
@@ -155,7 +159,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (raw === null || raw === undefined) return 0;
         const str = String(raw).trim();
         const m = months || 0;
-        // 尝试匹配 =数字+(表达式)
         const match = str.match(/^=(\d+(?:\.\d+)?)\+\((.+)\)$/);
         if (match) {
             const unitPrice = parseFloat(match[1]) || 0;
@@ -163,10 +166,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const extra = safeEval(extraExpr);
             return m * unitPrice + extra;
         }
-        // 纯数字：当作单价
         const num = parseFloat(str);
         if (!isNaN(num)) return m * num;
-        // 其他情况尝试整体当作表达式
         return safeEval(str);
     }
 
@@ -180,6 +181,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) { return 0; }
     }
 
+    // 计算列宽
     function calcColumnWidth(col) {
         let headerText = getColumnDisplayName(col);
         let lines = headerText.split('<br>');
@@ -190,14 +192,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         if (col.is_income === 1 || col.is_income === 2) maxHeaderWidth += 20;
         maxHeaderWidth += 8;
+
         let maxCellWidth = 0;
         state.records.forEach(record => {
             const displayVal = getDisplayValue(record, col);
             let w = measureTextWidth(displayVal, 400, 14) + 16;
-            if (col.col_key === 'expense') {
-                // 支出列显示结果，宽度需求较小
-                w = Math.max(w, 60);
-            }
+            if (col.col_key === 'expense') w = Math.max(w, 60);
             if (w > maxCellWidth) maxCellWidth = w;
         });
         return Math.max(60, Math.min(400, Math.max(maxHeaderWidth, maxCellWidth)));
@@ -257,6 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) { return expr; }
     }
 
+    // --- API ---
     const API = {
         get: (url) => fetch('/api' + url, { credentials: 'include' }).then(r => r.json()),
         post: (url, data) => fetch('/api' + url, {
@@ -268,6 +269,7 @@ document.addEventListener('DOMContentLoaded', function() {
         delete: (url) => fetch('/api' + url, { method: 'DELETE', credentials: 'include' }).then(r => r.json())
     };
 
+    // 数据加载
     async function loadTabs() { state.tabs = await API.get('/tabs'); return state.tabs; }
     async function loadColumns(tabId) { state.columns = await API.get('/columns?tabId=' + tabId); return state.columns; }
     async function loadRecords(tabId) {
@@ -307,6 +309,7 @@ document.addEventListener('DOMContentLoaded', function() {
         catch (err) { setStatus('❌ 加载失败: ' + err.message); }
     }
 
+    // 标签渲染
     function renderTabs() {
         let html = '';
         state.tabs.forEach(tab => {
@@ -380,6 +383,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (name && name.trim()) createTab(name.trim());
     });
 
+    // 筛选辅助
     function normalizeFilterValue(value) {
         if (value === null || value === undefined || String(value).trim() === '') return '(空白)';
         return String(value).trim();
@@ -399,6 +403,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // 渲染表格（刷新时不自动适配列宽）
     function renderTable(shouldAutoFit = false) {
         if (!state.currentTabId) return;
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
@@ -513,7 +518,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const step = col.col_type === 'number' ? 'step="0.01"' : '';
                     inputHtml = `<input type="${inputType}" class="cell-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(val || '')}" ${step} />`;
                 }
-                tbodyHtml += `<td>${inputHtml}</td>`;
+                tbodyHtml += `<td class="${colKey === 'expense' || colKey === 'fee' ? 'editable-td' : ''}">${inputHtml}</td>`;
             });
             tbodyHtml += '</tr>';
         });
@@ -580,6 +585,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <span class="filter-count">(${opt.count})</span>
             </label>
         `).join('');
+
         const allHtml = `
             <label class="filter-option-label filter-select-all">
                 <input type="checkbox" class="filter-select-all-checkbox" data-col="${escapeAttr(colKey)}" /> <span class="filter-option-text">全选</span>
@@ -588,6 +594,7 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         panel.querySelector('.filter-options').innerHTML = allHtml;
         panel.querySelector('.filter-summary').textContent = `已选 0 / ${options.length}`;
+
         const allCheckboxes = Array.from(panel.querySelectorAll('.filter-option:not(.filter-select-all-checkbox)'));
         const selected = isFilterActive(colKey) ? state.filters[colKey] : allCheckboxes.map(cb => cb.value);
         allCheckboxes.forEach(cb => { cb.checked = selected.includes(cb.value); });
@@ -646,6 +653,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function bindFilterEvents() {
         if (filterDocumentClickBound) return;
         filterDocumentClickBound = true;
+
         document.body.addEventListener('click', function(e) {
             if (e.target.classList.contains('col-dropdown-btn')) {
                 e.stopPropagation();
@@ -662,9 +670,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 return;
             }
+
             if (!e.target.closest('.col-dropdown-btn') && !e.target.closest('.col-dropdown-panel')) {
                 closeFilterPanels();
             }
+
             if (e.target.classList.contains('filter-ok')) {
                 const colKey = e.target.dataset.col;
                 const panel = document.querySelector(`.col-dropdown-panel[data-col="${colKey}"]`);
@@ -677,11 +687,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 renderTable(false);
                 return;
             }
+
             if (e.target.classList.contains('filter-cancel')) {
                 const panel = e.target.closest('.col-dropdown-panel');
                 if (panel) panel.classList.remove('show');
                 return;
             }
+
             if (e.target.classList.contains('filter-clear')) {
                 const colKey = e.target.dataset.col;
                 delete state.filters[colKey];
@@ -691,6 +703,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
         });
+
         document.body.addEventListener('change', function(e) {
             if (e.target.classList.contains('filter-select-all-checkbox')) {
                 const panel = e.target.closest('.col-dropdown-panel');
@@ -701,6 +714,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateSelectAllCheckbox(e.target.closest('.col-dropdown-panel'));
             }
         });
+
         document.body.addEventListener('input', function(e) {
             if (e.target.classList.contains('filter-search')) {
                 const panel = e.target.closest('.col-dropdown-panel');
@@ -715,6 +729,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // 表格事件
     function bindTableEvents() {
         const selectAll = $('#selectAll');
         if (selectAll) {
@@ -735,6 +750,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (selectAll) selectAll.checked = $$('.row-checkbox').length > 0 && Array.from($$('.row-checkbox')).every(c => c.checked);
             };
         });
+
         $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
             input.onblur = () => handleCellChange(input);
             input.onkeydown = (e) => {
@@ -742,6 +758,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
             if (input.tagName === 'SELECT') input.onchange = () => handleCellChange(input);
         });
+
         $$('.col-resize').forEach(handle => {
             let startX, startWidth, colKey;
             handle.onmousedown = (e) => {
@@ -773,7 +790,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function bindSpecialEvents() {
-        // 日期、月数等事件不变
+        // 日期
         $$('.date-input').forEach(input => {
             input.onchange = function() {
                 const col = this.dataset.col;
@@ -799,6 +816,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
+        // 月数
         $$('.months-dec').forEach(btn => {
             btn.onclick = function() {
                 const col = this.dataset.col;
@@ -825,6 +843,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         $$('.months-input').forEach(input => { input.onchange = function() { handleCellChange(this); }; });
 
+        // 地址下拉
         $$('.address-select').forEach(sel => {
             sel.onchange = function() {
                 const tr = this.closest('tr');
@@ -884,13 +903,15 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 支出交互（点击显示文字切换为输入）
+        // 支出交互
         $$('.expense-display').forEach(display => {
             display.addEventListener('click', function(e) {
                 const parent = this.parentElement; // .expense-inline
                 const input = parent.querySelector('.expense-input');
+                const td = parent.closest('td');
                 this.style.display = 'none';
                 input.style.display = 'inline-block';
+                td.classList.add('editing-cell');
                 input.focus();
                 input.select();
             });
@@ -900,13 +921,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const finishEditing = () => {
                 const parent = input.closest('.expense-inline');
                 const display = parent.querySelector('.expense-display');
-                const colKey = 'expense';
+                const td = parent.closest('td');
                 const id = parseInt(parent.closest('tr').dataset.id);
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
 
                 const rawValue = input.value.trim();
-                record.data[colKey] = rawValue || '0';
+                record.data['expense'] = rawValue || '0';
                 record._updated = true;
 
                 const months = parseInt(record.data.months) || 0;
@@ -915,10 +936,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 input.style.display = 'none';
                 display.style.display = 'inline';
+                td.classList.remove('editing-cell');
 
                 if (record._saveTimeout) clearTimeout(record._saveTimeout);
                 record._saveTimeout = setTimeout(() => saveRecord(record), 300);
-                updateFilterOptionsForCol(colKey);
+                updateFilterOptionsForCol('expense');
                 renderTable(false);
             };
 
@@ -931,6 +953,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (e.key === 'Escape') {
                     const parent = input.closest('.expense-inline');
                     const display = parent.querySelector('.expense-display');
+                    const td = parent.closest('td');
                     const id = parseInt(parent.closest('tr').dataset.id);
                     const record = state.records.find(r => r.id === id);
                     const raw = record ? (record.data['expense'] || '') : '';
@@ -938,22 +961,25 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.blur();
                 }
             });
-            // 焦点时加宽
             input.addEventListener('focus', function() {
-                this.classList.add('editing-wide');
+                const td = this.closest('td');
+                if (td) td.classList.add('editing-cell');
             });
             input.addEventListener('blur', function() {
-                this.classList.remove('editing-wide');
+                const td = this.closest('td');
+                if (td) td.classList.remove('editing-cell');
             });
         });
 
-        // 收入交互（已有点击切换，增加宽度处理）
+        // 收入交互
         $$('.fee-display').forEach(display => {
             display.addEventListener('click', function(e) {
                 const parent = this.parentElement;
                 const input = parent.querySelector('.fee-input');
+                const td = parent.closest('td');
                 this.style.display = 'none';
                 input.style.display = 'inline-block';
+                td.classList.add('editing-cell');
                 input.focus();
                 input.select();
             });
@@ -963,6 +989,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const finishEditing = () => {
                 const parent = input.closest('.fee-control');
                 const display = parent.querySelector('.fee-display');
+                const td = parent.closest('td');
                 const colKey = parent.dataset.col;
                 const id = parseInt(parent.dataset.id);
                 const record = state.records.find(r => r.id === id);
@@ -978,6 +1005,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 input.style.display = 'none';
                 display.style.display = 'inline';
+                td.classList.remove('editing-cell');
 
                 if (record._saveTimeout) clearTimeout(record._saveTimeout);
                 record._saveTimeout = setTimeout(() => saveRecord(record), 300);
@@ -994,6 +1022,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (e.key === 'Escape') {
                     const parent = input.closest('.fee-control');
                     const display = parent.querySelector('.fee-display');
+                    const td = parent.closest('td');
                     const id = parseInt(parent.dataset.id);
                     const record = state.records.find(r => r.id === id);
                     const raw = record ? (record.data[parent.dataset.col] || '') : '';
@@ -1001,12 +1030,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.blur();
                 }
             });
-            // 焦点时加宽
             input.addEventListener('focus', function() {
-                this.classList.add('editing-wide');
+                const td = this.closest('td');
+                if (td) td.classList.add('editing-cell');
             });
             input.addEventListener('blur', function() {
-                this.classList.remove('editing-wide');
+                const td = this.closest('td');
+                if (td) td.classList.remove('editing-cell');
             });
         });
     }
@@ -1064,6 +1094,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // --- 增删 ---
     async function addRow() {
         if (!state.currentTabId) return;
         try {
@@ -1105,6 +1136,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
     }
 
+    // 导出/导入
     async function exportData() {
         if (state.records.length === 0) { setStatus('⚠️ 无数据'); return; }
         try {
@@ -1124,7 +1156,56 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function showImportModal() { importModal.classList.add('show'); importFileInput.value = ''; importStatus.textContent = ''; }
-    async function handleImport() { /* 保持不变 */ }
+    async function handleImport() {
+        const file = importFileInput.files[0];
+        if (!file) { importStatus.textContent = '⚠️ 请选择文件'; return; }
+        importStatus.textContent = '🔄 读取中...';
+        try {
+            let records = [];
+            if (file.name.endsWith('.csv')) {
+                const text = await file.text();
+                const lines = text.split('\n').filter(l => l.trim());
+                if (lines.length < 2) throw new Error('CSV格式错误');
+                const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+                const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
+                for (let i = 1; i < lines.length; i++) {
+                    const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+                    const data = {};
+                    visibleColumns.forEach((col, idx) => { data[col.col_key] = values[idx] || ''; });
+                    records.push(data);
+                }
+            } else {
+                await loadXLSX();
+                const arrayBuffer = await file.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+                if (jsonData.length === 0) throw new Error('Excel为空');
+                const headers = Object.keys(jsonData[0]);
+                const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
+                const colMap = {};
+                visibleColumns.forEach(col => {
+                    const matched = headers.find(h => h === col.col_name || h === col.col_key);
+                    if (matched) colMap[col.col_key] = matched;
+                });
+                records = jsonData.map(row => {
+                    const data = {};
+                    visibleColumns.forEach(col => {
+                        const key = colMap[col.col_key];
+                        data[col.col_key] = key ? row[key] : '';
+                    });
+                    return data;
+                });
+            }
+            if (records.length === 0) throw new Error('无有效数据');
+            importStatus.textContent = `🔄 导入 ${records.length} 条...`;
+            await API.post('/records/import', { tab_id: state.currentTabId, records });
+            await loadDataForTab(state.currentTabId);
+            renderTable(false);
+            importStatus.textContent = `✅ 成功导入 ${records.length} 条`;
+            setTimeout(() => importModal.classList.remove('show'), 1500);
+        } catch (err) { importStatus.textContent = '❌ 导入失败: ' + err.message; }
+    }
 
     function loadXLSX() { return new Promise((resolve, reject) => {
         if (typeof XLSX !== 'undefined') { resolve(); return; }
@@ -1176,7 +1257,67 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         });
         columnList.innerHTML = html;
-        // 拖拽等事件保持不变
+
+        const items = columnList.querySelectorAll('.column-item');
+        items.forEach(item => {
+            item.addEventListener('dragstart', function(e) {
+                this.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', this.dataset.id);
+            });
+            item.addEventListener('dragend', function() { this.classList.remove('dragging'); });
+            item.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                this.classList.add('drag-over');
+            });
+            item.addEventListener('dragleave', function() { this.classList.remove('drag-over'); });
+            item.addEventListener('drop', async function(e) {
+                e.preventDefault();
+                this.classList.remove('drag-over');
+                const draggedId = parseInt(e.dataTransfer.getData('text/plain'));
+                const targetId = parseInt(this.dataset.id);
+                if (draggedId === targetId) return;
+                const cols = state.columns;
+                const draggedIndex = cols.findIndex(c => c.id === draggedId);
+                const targetIndex = cols.findIndex(c => c.id === targetId);
+                if (draggedIndex === -1 || targetIndex === -1) return;
+                const temp = cols[draggedIndex].col_order;
+                cols[draggedIndex].col_order = cols[targetIndex].col_order;
+                cols[targetIndex].col_order = temp;
+                cols.sort((a, b) => a.col_order - b.col_order);
+                const orderMap = {};
+                cols.forEach((c, i) => { orderMap[c.id] = i; });
+                try {
+                    await API.post('/columns/reorder', { orderMap });
+                    state.columns = cols;
+                    renderColumnList();
+                    renderTable(false);
+                    setStatus('✅ 顺序已更新');
+                } catch (err) {
+                    setStatus('❌ 更新失败: ' + err.message);
+                    await loadColumns(state.currentTabId);
+                    renderColumnList();
+                }
+            });
+        });
+
+        columnList.querySelectorAll('.income-toggle').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const id = parseInt(this.dataset.id);
+                const col = state.columns.find(c => c.id === id);
+                if (!col) return;
+                let newVal = (col.is_income || 0) + 1;
+                if (newVal > 2) newVal = 0;
+                try {
+                    await API.put('/columns/' + id, { is_income: newVal });
+                    col.is_income = newVal;
+                    renderColumnList();
+                    renderTable(false);
+                    setStatus('✅ 标记已更新');
+                } catch (err) { setStatus('❌ 更新失败: ' + err.message); }
+            });
+        });
     }
 
     window.toggleColumnVisibility = async function(id, currentVisible) {
@@ -1204,22 +1345,32 @@ document.addEventListener('DOMContentLoaded', function() {
         const type = newColType.value;
         if (!name) { setStatus('⚠️ 请输入列名称'); return; }
         if (!state.currentTabId) { setStatus('⚠️ 请先选择一个标签'); return; }
+
         const ts = Date.now();
         const rand = Math.random().toString(36).substring(2, 6);
         const key = `col_${ts}_${rand}`;
+
         try {
-            const result = await API.post('/columns', { tab_id: state.currentTabId, col_key: key, col_name: name, col_type: type, is_income: 0 });
+            const result = await API.post('/columns', {
+                tab_id: state.currentTabId,
+                col_key: key,
+                col_name: name,
+                col_type: type,
+                is_income: 0
+            });
             if (result.success) {
                 newColName.value = '';
                 await loadColumns(state.currentTabId);
                 renderColumnList();
                 renderTable(false);
                 setStatus('✅ 列添加成功');
-            } else setStatus('❌ 添加失败: ' + (result.error || '未知错误'));
+            } else {
+                setStatus('❌ 添加失败: ' + (result.error || '未知错误'));
+            }
         } catch (err) { setStatus('❌ 添加失败: ' + err.message); }
     }
 
-    // --- 统计（已适配支出公式） ---
+    // --- 统计 ---
     function renderStats() {
         if (!state.currentTabId) return;
         const records = state.records;
@@ -1227,6 +1378,7 @@ document.addEventListener('DOMContentLoaded', function() {
             statsContainer.innerHTML = '<p style="color:#999;text-align:center;padding:40px 0;">暂无数据</p>';
             return;
         }
+
         let totalExpense = 0, totalIncome = 0;
         records.forEach(r => {
             const months = parseInt(r.data.months) || 0;
@@ -1235,19 +1387,148 @@ document.addEventListener('DOMContentLoaded', function() {
             totalIncome += (typeof feeNum === 'number' ? feeNum : (parseFloat(feeNum) || 0));
         });
         const net = totalIncome - totalExpense;
-        // 每日明细同理，略（与之前相同）
-        let html = `...统计HTML...`;
+
+        const groups = {};
+        records.forEach(record => {
+            const dateVal = record.data.host_purchase || record.data.client_purchase || '';
+            if (!dateVal) return;
+            const d = new Date(dateVal);
+            if (isNaN(d)) return;
+            const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(record);
+        });
+
+        const dailyStats = [];
+        Object.keys(groups).sort().forEach(dateKey => {
+            const dayRecords = groups[dateKey];
+            let dayExpense = 0, dayIncome = 0;
+            dayRecords.forEach(r => {
+                const months = parseInt(r.data.months) || 0;
+                dayExpense += computeExpenseValue(r.data.expense, months);
+                const feeNum = computeFeeValue(r.data.fee || '');
+                dayIncome += (typeof feeNum === 'number' ? feeNum : (parseFloat(feeNum) || 0));
+            });
+            dailyStats.push({ date: dateKey, income: dayIncome, expense: dayExpense, net: dayIncome - dayExpense });
+        });
+
+        let html = `
+            <div class="stats-grid">
+                <div class="stat-card"><div class="stat-label">总支出</div><div class="stat-value negative">${totalExpense.toFixed(2)}</div></div>
+                <div class="stat-card"><div class="stat-label">总收入</div><div class="stat-value positive">${totalIncome.toFixed(2)}</div></div>
+                <div class="stat-card"><div class="stat-label">净收入</div><div class="stat-value ${net >= 0 ? 'positive' : 'negative'}">${net.toFixed(2)}</div></div>
+                <div class="stat-card"><div class="stat-label">记录总数</div><div class="stat-value neutral">${records.length}</div></div>
+            </div>
+            <div class="stats-detail">
+                <h3>每日明细</h3>
+                <table><thead><tr><th>日期</th><th>收入</th><th>支出</th><th>净额</th></tr></thead><tbody>
+        `;
+        dailyStats.forEach(day => {
+            html += `<tr><td>${day.date}</td><td style="color:#67c23a;">${day.income.toFixed(2)}</td><td style="color:#f56c6c;">${day.expense.toFixed(2)}</td><td style="color:${day.net >= 0 ? '#67c23a' : '#f56c6c'};">${day.net.toFixed(2)}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
         statsContainer.innerHTML = html;
     }
 
-    // --- 密码修改、注册开关、地址后缀等函数保持原样 ---
-    async function changePassword() { /* ... */ }
-    async function loadRegisterSwitch() { /* ... */ }
-    async function saveRegisterSwitch() { /* ... */ }
-    async function loadSuffixSettings() { /* ... */ }
-    async function saveSuffixSettings() { /* ... */ }
-    async function uploadFavicon() { /* ... */ }
-    async function loadSettings() { /* ... */ }
+    // --- 密码修改 ---
+    async function changePassword() {
+        const oldPwd = oldPwdInput.value.trim();
+        const newPwd = newPwdInput.value.trim();
+        const confirmPwd = confirmPwdInput.value.trim();
+        if (!oldPwd) { changePwdStatus.textContent = '⚠️ 请输入当前密码'; return; }
+        if (newPwd.length < 6) { changePwdStatus.textContent = '⚠️ 新密码至少6位'; return; }
+        if (newPwd !== confirmPwd) { changePwdStatus.textContent = '⚠️ 两次密码不一致'; return; }
+        try {
+            await API.post('/auth/change-password', { oldPassword: oldPwd, newPassword: newPwd });
+            changePwdStatus.textContent = '✅ 密码修改成功';
+            oldPwdInput.value = ''; newPwdInput.value = ''; confirmPwdInput.value = '';
+        } catch (err) { changePwdStatus.textContent = '❌ 修改失败: ' + err.message; }
+    }
+
+    // --- 注册开关 ---
+    async function loadRegisterSwitch() {
+        try {
+            const data = await API.get('/settings/allow_register');
+            if (data.value !== undefined) allowRegisterCheckbox.checked = data.value !== false;
+        } catch (err) {}
+    }
+    async function saveRegisterSwitch() {
+        const value = allowRegisterCheckbox.checked;
+        try {
+            await API.post('/settings', { key: 'allow_register', value });
+            registerSwitchStatus.textContent = '✅ 已保存';
+            setTimeout(() => registerSwitchStatus.textContent = '', 3000);
+        } catch (err) { registerSwitchStatus.textContent = '❌ 保存失败: ' + err.message; }
+    }
+
+    // --- 地址后缀 ---
+    async function loadSuffixSettings() {
+        try {
+            const ipSuffix = await API.get('/settings/ip_port_suffix');
+            const domainSuffix = await API.get('/settings/domain_port_suffix');
+            if (ipSuffix.value !== null) { state.ipPortSuffix = ipSuffix.value; ipPortSuffixInput.value = ipSuffix.value; }
+            if (domainSuffix.value !== null) { state.domainPortSuffix = domainSuffix.value; domainPortSuffixInput.value = domainSuffix.value; }
+        } catch (err) { console.warn('加载后缀设置失败:', err); }
+    }
+    async function saveSuffixSettings() {
+        const ipSuffix = ipPortSuffixInput.value.trim();
+        const domainSuffix = domainPortSuffixInput.value.trim();
+        try {
+            await API.post('/settings', { key: 'ip_port_suffix', value: ipSuffix });
+            await API.post('/settings', { key: 'domain_port_suffix', value: domainSuffix });
+            state.ipPortSuffix = ipSuffix; state.domainPortSuffix = domainSuffix;
+            suffixStatus.textContent = '✅ 已保存';
+            setTimeout(() => suffixStatus.textContent = '', 3000);
+        } catch (err) { suffixStatus.textContent = '❌ 保存失败: ' + err.message; }
+    }
+
+    // --- Favicon ---
+    async function uploadFavicon() {
+        const fileInput = document.getElementById('faviconFileInput');
+        const file = fileInput.files[0];
+        if (!file) { document.getElementById('faviconStatus').textContent = '⚠️ 请选择文件'; return; }
+        const formData = new FormData();
+        formData.append('image', file);
+        try {
+            const res = await fetch('/api/upload', { method: 'POST', credentials: 'include', body: formData });
+            const data = await res.json();
+            if (data.success) {
+                const response = await fetch('/api/settings/favicon', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ path: data.url })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('faviconStatus').textContent = '✅ 图标已更新，请刷新浏览器查看';
+                    const link = document.querySelector("link[rel*='icon']");
+                    if (link) link.href = data.url + '?v=' + Date.now();
+                } else { document.getElementById('faviconStatus').textContent = '❌ 保存图标失败: ' + (result.error || ''); }
+            } else { document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + (data.error || ''); }
+        } catch (err) { document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + err.message; }
+    }
+
+    // --- 加载设置 ---
+    async function loadSettings() {
+        try {
+            const cert = await API.get('/settings/cert_path');
+            const key = await API.get('/settings/key_path');
+            if (cert.value) document.getElementById('certPathInput').value = cert.value;
+            if (key.value) document.getElementById('keyPathInput').value = key.value;
+            const bg = await API.get('/settings/background');
+            if (bg.value) {
+                const bgData = bg.value;
+                const preview = document.getElementById('bgPreview');
+                if (bgData.type === 'url' || bgData.type === 'local') {
+                    const url = bgData.type === 'url' ? bgData.url : bgData.path;
+                    preview.style.backgroundImage = `url("${cssUrl(url)}")`;
+                    preview.classList.add('has-bg'); preview.textContent = '';
+                }
+            }
+            await loadRegisterSwitch();
+            await loadSuffixSettings();
+            const auth = await API.get('/auth/check');
+            if (auth.loggedIn && auth.user.id === 1) registerSwitchGroup.style.display = 'block';
+        } catch (err) { console.warn('加载设置失败:', err); }
+    }
 
     // --- 事件绑定 ---
     addRowBtn.addEventListener('click', addRow);
@@ -1258,7 +1539,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(false));
     });
     manageColumnsBtn.addEventListener('click', showColumnManager);
-    logoutBtn.addEventListener('click', async function() { /* ... */ });
+    logoutBtn.addEventListener('click', async function() {
+        if (!confirm('确定退出吗？')) return;
+        try { await API.post('/auth/logout'); window.location.href = '/login'; } catch (err) { setStatus('❌ 退出失败: ' + err.message); }
+    });
 
     addressSuffixBtn.addEventListener('click', () => addressSuffixModal.classList.add('show'));
     closeAddressSuffixModal.addEventListener('click', () => addressSuffixModal.classList.remove('show'));
@@ -1270,7 +1554,64 @@ document.addEventListener('DOMContentLoaded', function() {
     changePwdBtn.addEventListener('click', changePassword);
     confirmPwdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') changePassword(); });
 
-    // ... 其他事件绑定
+    document.getElementById('saveCertBtn').addEventListener('click', async function() {
+        const certPath = document.getElementById('certPathInput').value.trim();
+        const keyPath = document.getElementById('keyPathInput').value.trim();
+        if (!certPath || !keyPath) { setStatus('⚠️ 请填写完整路径'); return; }
+        try {
+            await API.post('/settings/cert', { certPath, keyPath });
+            setStatus('✅ 证书路径已保存，重启服务生效');
+            document.getElementById('certStatus').textContent = '✅ 已保存，请重启服务';
+        } catch (err) { setStatus('❌ 保存失败: ' + err.message); }
+    });
+
+    document.getElementById('setBgUrl').addEventListener('click', async function() {
+        const url = document.getElementById('bgUrlInput').value.trim();
+        if (!url) { setStatus('⚠️ 请输入URL'); return; }
+        try {
+            await API.post('/settings', { key: 'background', value: { type: 'url', url } });
+            const preview = document.getElementById('bgPreview');
+            preview.style.backgroundImage = `url("${cssUrl(url)}")`; preview.classList.add('has-bg'); preview.textContent = '';
+            setStatus('✅ 背景已更新');
+        } catch (err) { setStatus('❌ 设置失败: ' + err.message); }
+    });
+    document.getElementById('uploadBgBtn').addEventListener('click', () => document.getElementById('bgFileInput').click());
+    document.getElementById('bgFileInput').addEventListener('change', async function() {
+        const file = this.files[0];
+        if (!file) return;
+        try {
+            setStatus('🔄 上传中...');
+            const formData = new FormData();
+            formData.append('image', file);
+            const res = await fetch('/api/upload', { method: 'POST', credentials: 'include', body: formData });
+            const data = await res.json();
+            if (data.success) {
+                await API.post('/settings', { key: 'background', value: { type: 'local', path: data.url } });
+                const preview = document.getElementById('bgPreview');
+                preview.style.backgroundImage = `url("${cssUrl(data.url)}")`; preview.classList.add('has-bg'); preview.textContent = '';
+                setStatus('✅ 背景已应用');
+            } else { setStatus('❌ 上传失败: ' + (data.error || '')); }
+        } catch (err) { setStatus('❌ 上传失败: ' + err.message); }
+    });
+    document.getElementById('removeBgBtn').addEventListener('click', async function() {
+        if (!confirm('确定移除背景吗？')) return;
+        try {
+            await API.delete('/settings/background');
+            const preview = document.getElementById('bgPreview');
+            preview.style.backgroundImage = ''; preview.classList.remove('has-bg'); preview.textContent = '暂无背景';
+            setStatus('✅ 背景已移除');
+        } catch (err) { setStatus('❌ 移除失败: ' + err.message); }
+    });
+
+    document.getElementById('uploadFaviconBtn').addEventListener('click', uploadFavicon);
+    document.getElementById('faviconFileInput').addEventListener('change', () => document.getElementById('faviconStatus').textContent = '');
+    saveRegisterSwitchBtn.addEventListener('click', saveRegisterSwitch);
+    saveSuffixBtn.addEventListener('click', saveSuffixSettings);
+
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'n') { e.preventDefault(); addRow(); }
+        if (e.key === 'Delete' && !e.target.closest('input') && !e.target.closest('select')) deleteSelected();
+    });
 
     // --- 初始化 ---
     async function init() {
