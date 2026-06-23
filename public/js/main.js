@@ -129,6 +129,32 @@ document.addEventListener('DOMContentLoaded', function() {
     function escapeAttr(value) { return escapeHtml(value); }
     function cssUrl(url) { return String(url ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"'); }
 
+    function getChineseInitials(text) {
+        const extraMap = {
+            '烟': 'y', '火': 'h', '云': 'y'
+        };
+        const initials = 'ABCDEFGHJKLMNOPQRSTWXYZ';
+        const boundary = '阿八嚓哒妸发旮哈讥咔垃妈拿噢啪期然撒塌穵昔压匝';
+        return String(text || '').split('').map(ch => {
+            if (extraMap[ch]) return extraMap[ch];
+            if (/^[a-zA-Z0-9]$/.test(ch)) return ch.toLowerCase();
+            for (let i = boundary.length - 1; i >= 0; i--) {
+                if (ch.localeCompare(boundary[i], 'zh-Hans-CN') >= 0) {
+                    return initials[i] ? initials[i].toLowerCase() : '';
+                }
+            }
+            return '';
+        }).join('');
+    }
+
+    function providerMatchesKeyword(name, keyword) {
+        const source = String(name || '').trim().toLowerCase();
+        const kw = String(keyword || '').trim().toLowerCase();
+        if (!kw) return true;
+        const initials = getChineseInitials(source);
+        return source.includes(kw) || initials.includes(kw);
+    }
+
     function measureTextWidth(text, fontWeight = 600, fontSize = 14) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -609,8 +635,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     const currentProvider = val || '';
                     const providerOptions = [...state.providerOptions];
                     if (currentProvider && !providerOptions.includes(currentProvider)) providerOptions.push(currentProvider);
-                    const options = providerOptions.map(opt => `<option value="${escapeAttr(opt)}" ${currentProvider === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('');
-                    inputHtml = `<select class="cell-input select-cell provider-select" data-col="${escapeAttr(colKey)}" data-id="${record.id}"><option value="">-</option>${options}</select>`;
+                    const options = providerOptions.map(opt => `
+                        <div class="provider-search-option" data-value="${escapeAttr(opt)}">
+                            <span>${escapeHtml(opt)}</span>
+                            <small>${escapeHtml(getChineseInitials(opt))}</small>
+                        </div>
+                    `).join('');
+                    inputHtml = `
+                        <div class="provider-search-box" data-id="${record.id}" data-col="${escapeAttr(colKey)}">
+                            <input type="text" class="cell-input provider-search-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(currentProvider)}" placeholder="搜索服务商" autocomplete="off" />
+                            <div class="provider-search-dropdown">${options}<div class="provider-search-empty">暂无匹配服务商</div></div>
+                        </div>
+                    `;
                 } else if (col.col_type === 'select') {
                     const options = (col.col_options || []).map(opt => `<option value="${escapeAttr(opt)}" ${val === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('');
                     inputHtml = `<select class="cell-input select-cell" data-col="${escapeAttr(colKey)}" data-id="${record.id}"><option value="">-</option>${options}</select>`;
@@ -913,7 +949,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        $$('.cell-input:not(.address-select):not(.provider-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
+        $$('.cell-input:not(.address-select):not(.provider-search-input):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
             input.onblur = () => handleCellChange(input);
             input.onkeydown = (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
@@ -1024,18 +1060,67 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 服务商下拉
-        $$('.provider-select').forEach(sel => {
-            sel.onchange = function() {
-                const colKey = this.dataset.col;
-                const id = parseInt(this.dataset.id);
+        // 服务商快速检索下拉
+        $$('.provider-search-box').forEach(box => {
+            const input = box.querySelector('.provider-search-input');
+            const dropdown = box.querySelector('.provider-search-dropdown');
+            if (!input || !dropdown) return;
+
+            const refreshOptions = () => {
+                const keyword = input.value.trim();
+                const rect = input.getBoundingClientRect();
+                dropdown.style.left = rect.left + 'px';
+                dropdown.style.top = (rect.bottom + 2) + 'px';
+                dropdown.style.width = Math.max(rect.width, 160) + 'px';
+                const options = Array.from(dropdown.querySelectorAll('.provider-search-option'));
+                let visibleCount = 0;
+                options.forEach(option => {
+                    const name = option.dataset.value || '';
+                    const visible = providerMatchesKeyword(name, keyword);
+                    option.style.display = visible ? 'flex' : 'none';
+                    if (visible) visibleCount++;
+                });
+                const empty = dropdown.querySelector('.provider-search-empty');
+                if (empty) empty.style.display = visibleCount === 0 ? 'block' : 'none';
+                dropdown.classList.add('show');
+            };
+
+            const saveProviderValue = (value) => {
+                const colKey = input.dataset.col;
+                const id = parseInt(input.dataset.id);
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
-                record.data[colKey] = this.value;
+                record.data[colKey] = value;
                 record._updated = true;
+                input.value = value;
                 updateFilterOptionsForCol(colKey);
                 saveRecord(record);
             };
+
+            input.addEventListener('focus', refreshOptions);
+            input.addEventListener('input', refreshOptions);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const firstVisible = Array.from(dropdown.querySelectorAll('.provider-search-option'))
+                        .find(option => option.style.display !== 'none');
+                    if (firstVisible) {
+                        saveProviderValue(firstVisible.dataset.value || '');
+                        dropdown.classList.remove('show');
+                    }
+                }
+                if (e.key === 'Escape') dropdown.classList.remove('show');
+            });
+            input.addEventListener('blur', () => {
+                setTimeout(() => dropdown.classList.remove('show'), 180);
+            });
+            dropdown.querySelectorAll('.provider-search-option').forEach(option => {
+                option.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    saveProviderValue(option.dataset.value || '');
+                    dropdown.classList.remove('show');
+                });
+            });
         });
 
         $$('.cell-input[data-col="ip_address"]').forEach(input => {
