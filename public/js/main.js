@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabManageMode: false,
         selectedTabs: new Set(),
         renameTabId: null,
+        providerOptions: [],
         isLoaded: false,
         userName: '',
         isAdmin: false,
@@ -41,6 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const refreshBtn = $('#refreshBtn');
     const manageColumnsBtn = $('#manageColumnsBtn');
     const addressSuffixBtn = $('#addressSuffixBtn');
+    const providerManageBtn = $('#providerManageBtn');
     const logoutBtn = $('#logoutBtn');
     const columnModal = $('#columnModal');
     const closeColumnModal = $('#closeColumnModal');
@@ -77,6 +79,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveRenameTabBtn = $('#saveRenameTabBtn');
     const cancelRenameTabBtn = $('#cancelRenameTabBtn');
     const renameTabStatus = $('#renameTabStatus');
+    const providerModal = $('#providerModal');
+    const closeProviderModal = $('#closeProviderModal');
+    const providerNameInput = $('#providerNameInput');
+    const addProviderBtn = $('#addProviderBtn');
+    const providerList = $('#providerList');
+    const providerStatus = $('#providerStatus');
 
     let filterDocumentClickBound = false;
 
@@ -597,6 +605,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     } else {
                         inputHtml = `<div class="date-control"><input type="date" class="cell-input date-input" data-col="${escapeAttr(colKey)}" data-id="${record.id}" value="${escapeAttr(dateVal)}" /></div>`;
                     }
+                } else if (colKey === 'provider') {
+                    const currentProvider = val || '';
+                    const providerOptions = [...state.providerOptions];
+                    if (currentProvider && !providerOptions.includes(currentProvider)) providerOptions.push(currentProvider);
+                    const options = providerOptions.map(opt => `<option value="${escapeAttr(opt)}" ${currentProvider === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('');
+                    inputHtml = `<select class="cell-input select-cell provider-select" data-col="${escapeAttr(colKey)}" data-id="${record.id}"><option value="">-</option>${options}</select>`;
                 } else if (col.col_type === 'select') {
                     const options = (col.col_options || []).map(opt => `<option value="${escapeAttr(opt)}" ${val === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('');
                     inputHtml = `<select class="cell-input select-cell" data-col="${escapeAttr(colKey)}" data-id="${record.id}"><option value="">-</option>${options}</select>`;
@@ -899,7 +913,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
+        $$('.cell-input:not(.address-select):not(.provider-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
             input.onblur = () => handleCellChange(input);
             input.onkeydown = (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
@@ -1007,6 +1021,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     saveRecord(record);
                 }
                 handleCellChange(this);
+            };
+        });
+
+        // 服务商下拉
+        $$('.provider-select').forEach(sel => {
+            sel.onchange = function() {
+                const colKey = this.dataset.col;
+                const id = parseInt(this.dataset.id);
+                const record = state.records.find(r => r.id === id);
+                if (!record) return;
+                record.data[colKey] = this.value;
+                record._updated = true;
+                updateFilterOptionsForCol(colKey);
+                saveRecord(record);
             };
         });
 
@@ -1641,6 +1669,87 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { suffixStatus.textContent = '❌ 保存失败: ' + err.message; }
     }
 
+    // --- 服务商管理 ---
+    function normalizeProviderOptions(options) {
+        const result = [];
+        (options || []).forEach(item => {
+            const name = String(item || '').trim();
+            if (name && !result.includes(name)) result.push(name);
+        });
+        return result;
+    }
+
+    function collectProviderOptionsFromRecords() {
+        const values = state.records.map(r => r.data.provider).filter(Boolean);
+        state.providerOptions = normalizeProviderOptions([...state.providerOptions, ...values]);
+    }
+
+    async function loadProviderOptions() {
+        try {
+            const data = await API.get('/settings/provider_options');
+            state.providerOptions = normalizeProviderOptions(Array.isArray(data.value) ? data.value : []);
+        } catch (err) {
+            state.providerOptions = [];
+        }
+    }
+
+    async function saveProviderOptions() {
+        await API.post('/settings', { key: 'provider_options', value: state.providerOptions });
+    }
+
+    function renderProviderList() {
+        if (!providerList) return;
+        if (state.providerOptions.length === 0) {
+            providerList.innerHTML = '<div class="provider-empty">暂无服务商</div>';
+            return;
+        }
+        providerList.innerHTML = state.providerOptions.map(name => `
+            <div class="provider-item">
+                <span class="provider-item-name">${escapeHtml(name)}</span>
+                <button type="button" class="delete-provider-btn" data-name="${escapeAttr(name)}">删除</button>
+            </div>
+        `).join('');
+        providerList.querySelectorAll('.delete-provider-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const name = this.dataset.name;
+                if (!confirm(`确定删除服务商“${name}”吗？已使用的记录不会被清空。`)) return;
+                try {
+                    state.providerOptions = state.providerOptions.filter(item => item !== name);
+                    await saveProviderOptions();
+                    renderProviderList();
+                    renderTable(false);
+                    providerStatus.textContent = '✅ 已删除';
+                    setTimeout(() => providerStatus.textContent = '', 2000);
+                } catch (err) { providerStatus.textContent = '❌ 删除失败: ' + err.message; }
+            });
+        });
+    }
+
+    function openProviderModal() {
+        collectProviderOptionsFromRecords();
+        providerNameInput.value = '';
+        providerStatus.textContent = '';
+        renderProviderList();
+        providerModal.classList.add('show');
+        setTimeout(() => providerNameInput.focus(), 0);
+    }
+
+    async function addProvider() {
+        const name = providerNameInput.value.trim();
+        if (!name) { providerStatus.textContent = '⚠️ 请输入服务商名称'; return; }
+        if (state.providerOptions.includes(name)) { providerStatus.textContent = '⚠️ 服务商已存在'; return; }
+        try {
+            state.providerOptions.unshift(name);
+            state.providerOptions = normalizeProviderOptions(state.providerOptions);
+            await saveProviderOptions();
+            providerNameInput.value = '';
+            providerStatus.textContent = '✅ 已添加';
+            renderProviderList();
+            renderTable(false);
+            setTimeout(() => providerStatus.textContent = '', 2000);
+        } catch (err) { providerStatus.textContent = '❌ 添加失败: ' + err.message; }
+    }
+
     // --- Favicon ---
     async function uploadFavicon() {
         const fileInput = document.getElementById('faviconFileInput');
@@ -1684,6 +1793,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             await loadRegisterSwitch();
             await loadSuffixSettings();
+            await loadProviderOptions();
+            collectProviderOptionsFromRecords();
             const auth = await API.get('/auth/check');
             if (auth.loggedIn && auth.user.id === 1) registerSwitchGroup.style.display = 'block';
         } catch (err) { console.warn('加载设置失败:', err); }
@@ -1707,7 +1818,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     addressSuffixBtn.addEventListener('click', () => addressSuffixModal.classList.add('show'));
+    providerManageBtn.addEventListener('click', openProviderModal);
     closeAddressSuffixModal.addEventListener('click', () => addressSuffixModal.classList.remove('show'));
+    closeProviderModal.addEventListener('click', () => providerModal.classList.remove('show'));
     closeColumnModal.addEventListener('click', () => columnModal.classList.remove('show'));
     if (addColBtn) addColBtn.addEventListener('click', addColumn);
     closeImport.addEventListener('click', () => importModal.classList.remove('show'));
@@ -1715,6 +1828,11 @@ document.addEventListener('DOMContentLoaded', function() {
     cancelImport.addEventListener('click', () => importModal.classList.remove('show'));
     changePwdBtn.addEventListener('click', changePassword);
     confirmPwdInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') changePassword(); });
+    addProviderBtn.addEventListener('click', addProvider);
+    providerNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') addProvider();
+        if (e.key === 'Escape') providerModal.classList.remove('show');
+    });
 
     document.getElementById('saveCertBtn').addEventListener('click', async function() {
         const certPath = document.getElementById('certPathInput').value.trim();
@@ -1783,12 +1901,14 @@ document.addEventListener('DOMContentLoaded', function() {
             usernameDisplay.textContent = auth.user.username;
             state.userName = auth.user.username;
             state.isAdmin = (auth.user.id === 1);
+            await loadProviderOptions();
             await loadTabs();
             if (state.tabs.length === 0) await createDefaultTab();
             else {
                 state.currentTabId = state.tabs[0].id;
                 await loadDataForTab(state.currentTabId);
             }
+            collectProviderOptionsFromRecords();
             renderTabs();
             renderTable(true);
             setStatus('✅ 加载完成');
