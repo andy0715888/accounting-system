@@ -211,6 +211,25 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="providerModal">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h2>服务商管理</h2>
+                <button class="modal-close" id="closeProviderModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="provider-manager">
+                    <div class="provider-add-row">
+                        <input type="text" id="providerNameInput" placeholder="请输入服务商名称" />
+                        <button class="tool-btn primary" id="addProviderBtn">添加</button>
+                    </div>
+                    <div class="provider-list" id="providerList"></div>
+                    <span id="providerStatus"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="status-bar"><span id="statusText">就绪</span></div>
 
     <script src="/js/api.js"></script>
