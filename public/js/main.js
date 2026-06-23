@@ -10,12 +10,15 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedRows: new Set(),
         filters: {},
         filterOptions: {},
+        tabCache: {},
+        tabManageMode: false,
+        selectedTabs: new Set(),
+        renameTabId: null,
         isLoaded: false,
         userName: '',
         isAdmin: false,
         ipPortSuffix: '',
-        domainPortSuffix: '',
-        providers: []  // 服务商列表
+        domainPortSuffix: ''
     };
 
     // DOM 引用
@@ -29,6 +32,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const usernameDisplay = $('#usernameDisplay');
     const currentTimeDisplay = $('#currentTimeDisplay');
     const addTabBtn = $('#addTabBtn');
+    const manageTabsBtn = $('#manageTabsBtn');
+    const deleteTabsBtn = $('#deleteTabsBtn');
     const addRowBtn = $('#addRowBtn');
     const deleteRowsBtn = $('#deleteRowsBtn');
     const importBtn = $('#importBtn');
@@ -66,209 +71,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const domainPortSuffixInput = $('#domainPortSuffixInput');
     const saveSuffixBtn = $('#saveSuffixBtn');
     const suffixStatus = $('#suffixStatus');
-
-    // 服务商管理相关 DOM
-    const manageProvidersBtn = $('#manageProvidersBtn');
-    const providerModal = $('#providerModal');
-    const closeProviderModal = $('#closeProviderModal');
-    const providerListWrap = $('#providerListWrap');
-    const newProviderInput = $('#newProviderInput');
-    const addProviderBtn = $('#addProviderBtn');
-    const providerStatus = $('#providerStatus');
-    const providerDropdown = $('#providerDropdown');
+    const renameTabModal = $('#renameTabModal');
+    const closeRenameTabModal = $('#closeRenameTabModal');
+    const renameTabInput = $('#renameTabInput');
+    const saveRenameTabBtn = $('#saveRenameTabBtn');
+    const cancelRenameTabBtn = $('#cancelRenameTabBtn');
+    const renameTabStatus = $('#renameTabStatus');
 
     let filterDocumentClickBound = false;
-
-    // =============================================
-    // 拼音首字母映射表（常用汉字覆盖）
-    // =============================================
-    const pinyinMap = {
-        '啊':'a','阿':'a','爱':'ai','安':'an','昂':'ang','奥':'ao',
-        '芭':'ba','把':'ba','百':'bai','班':'ban','帮':'bang','包':'bao','北':'bei','本':'ben','蹦':'beng','逼':'bi','边':'bian','标':'biao','别':'bie','兵':'bing','波':'bo','不':'bu',
-        '擦':'ca','才':'cai','参':'can','苍':'cang','操':'cao','测':'ce','曾':'ceng','叉':'cha','差':'cha','产':'chan','长':'chang','超':'chao','车':'che','陈':'chen','成':'cheng','吃':'chi','充':'chong','抽':'chou','出':'chu','穿':'chuan','窗':'chuang','吹':'chui','春':'chun','词':'ci','从':'cong','凑':'cou','粗':'cu','存':'cun','错':'cuo',
-        '打':'da','大':'da','带':'dai','单':'dan','当':'dang','刀':'dao','得':'de','灯':'deng','地':'di','点':'dian','调':'diao','丁':'ding','丢':'diu','东':'dong','斗':'dou','都':'du','端':'duan','对':'dui','顿':'dun','多':'duo',
-        '额':'e','恶':'e','恩':'en','儿':'er',
-        '发':'fa','番':'fan','方':'fang','飞':'fei','分':'fen','丰':'feng','佛':'fo','否':'fou','夫':'fu',
-        '噶':'ga','该':'gai','干':'gan','刚':'gang','高':'gao','哥':'ge','给':'gei','跟':'gen','更':'geng','工':'gong','购':'gou','古':'gu','关':'guan','广':'guang','规':'gui','滚':'gun','锅':'guo',
-        '哈':'ha','还':'hai','汉':'han','好':'hao','喝':'he','黑':'hei','很':'hen','恒':'heng','轰':'hong','后':'hou','胡':'hu','花':'hua','欢':'huan','黄':'huang','挥':'hui','婚':'hun','活':'huo',
-        '击':'ji','机':'ji','家':'jia','间':'jian','将':'jiang','教':'jiao','接':'jie','今':'jin','经':'jing','就':'jiu','举':'ju','卷':'juan','军':'jun',
-        '喀':'ka','开':'kai','看':'kan','康':'kang','靠':'kao','科':'ke','肯':'ken','坑':'keng','空':'kong','口':'kou','哭':'ku','快':'kuai','宽':'kuan','困':'kun','扩':'kuo',
-        '拉':'la','来':'lai','蓝':'lan','浪':'lang','老':'lao','乐':'le','类':'lei','冷':'leng','里':'li','连':'lian','两':'liang','聊':'liao','林':'lin','零':'ling','流':'liu','楼':'lou','鲁':'lu','旅':'lv','绿':'lv','论':'lun','罗':'luo',
-        '妈':'ma','买':'mai','满':'man','忙':'mang','毛':'mao','没':'mei','门':'men','梦':'meng','米':'mi','面':'mian','秒':'miao','灭':'mie','民':'min','名':'ming','摸':'mo','目':'mu',
-        '拿':'na','那':'na','南':'nan','闹':'nao','你':'ni','年':'nian','鸟':'niao','宁':'ning','牛':'niu','农':'nong','女':'nv',
-        '哦':'o','欧':'ou',
-        '怕':'pa','排':'pai','判':'pan','跑':'pao','朋':'peng','皮':'pi','片':'pian','漂':'piao','拼':'pin','平':'ping','破':'po','普':'pu',
-        '期':'qi','起':'qi','千':'qian','强':'qiang','请':'qing','求':'qiu','全':'quan','确':'que',
-        '然':'ran','让':'rang','热':'re','人':'ren','日':'ri','荣':'rong','如':'ru',
-        '撒':'sa','三':'san','色':'se','森':'sen','杀':'sha','山':'shan','上':'shang','烧':'shao','射':'she','神':'shen','生':'sheng','师':'shi','是':'shi','收':'shou','书':'shu','双':'shuang','水':'shui','说':'shuo','思':'si','送':'song','搜':'sou','速':'su','算':'suan','虽':'sui','孙':'sun','所':'suo',
-        '她':'ta','太':'tai','谈':'tan','唐':'tang','特':'te','天':'tian','跳':'tiao','听':'ting','通':'tong','推':'tui','吞':'tun','脱':'tuo',
-        '哇':'wa','外':'wai','玩':'wan','网':'wang','位':'wei','文':'wen','我':'wo','无':'wu',
-        '西':'xi','下':'xia','先':'xian','想':'xiang','小':'xiao','心':'xin','行':'xing','雄':'xiong','休':'xiu','需':'xu','选':'xuan','学':'xue',
-        '呀':'ya','眼':'yan','样':'yang','要':'yao','也':'ye','一':'yi','因':'yin','用':'yong','有':'you','于':'yu','员':'yuan','云':'yun','烟':'yan','火':'huo',
-        '在':'zai','早':'zao','怎':'zen','增':'zeng','站':'zhan','找':'zhao','这':'zhe','真':'zhen','正':'zheng','支':'zhi','中':'zhong','重':'zhong','主':'zhu','转':'zhuan','装':'zhuang','追':'zhui','准':'zhun','字':'zi','总':'zong','走':'zou','租':'zu','最':'zui','做':'zuo'
-    };
-
-    // 获取中文字符串的拼音首字母
-    function getPinyinInitials(str) {
-        if (!str) return '';
-        let result = '';
-        for (let i = 0; i < str.length; i++) {
-            const char = str[i];
-            if (pinyinMap[char]) {
-                result += pinyinMap[char][0]; // 取首字母
-            } else if (/[a-zA-Z]/.test(char)) {
-                result += char.toLowerCase();
-            }
-        }
-        return result;
-    }
-
-    // 判断关键字是否匹配（支持：原文包含、拼音首字母包含、英文不区分大小写）
-    function providerMatch(providerName, keyword) {
-        if (!keyword) return true;
-        const kw = keyword.toLowerCase().trim();
-        const name = providerName.toLowerCase();
-        // 直接包含
-        if (name.includes(kw)) return true;
-        // 拼音首字母匹配
-        const initials = getPinyinInitials(providerName);
-        if (initials.includes(kw)) return true;
-        return false;
-    }
-
-    // 高亮匹配文字（仅原文匹配时高亮）
-    function highlightText(text, keyword) {
-        if (!keyword) return escapeHtml(text);
-        const kw = keyword.toLowerCase();
-        const lowerText = text.toLowerCase();
-        const idx = lowerText.indexOf(kw);
-        if (idx >= 0) {
-            return escapeHtml(text.slice(0, idx)) +
-                '<mark>' + escapeHtml(text.slice(idx, idx + kw.length)) + '</mark>' +
-                escapeHtml(text.slice(idx + kw.length));
-        }
-        return escapeHtml(text);
-    }
-
-    // =============================================
-    // 服务商下拉组件
-    // =============================================
-    let activeProviderInput = null; // 当前激活的输入框
-
-    function showProviderDropdown(inputEl, keyword) {
-        const list = state.providers.filter(p => providerMatch(p, keyword));
-        if (list.length === 0) {
-            providerDropdown.innerHTML = '<div class="provider-dropdown-item no-match">无匹配结果</div>';
-        } else {
-            providerDropdown.innerHTML = list.map(p =>
-                `<div class="provider-dropdown-item" data-value="${escapeAttr(p)}">${highlightText(p, keyword)}</div>`
-            ).join('');
-        }
-        // 定位
-        const rect = inputEl.getBoundingClientRect();
-        providerDropdown.style.left = rect.left + 'px';
-        providerDropdown.style.top = (rect.bottom + 2) + 'px';
-        providerDropdown.style.minWidth = Math.max(rect.width, 160) + 'px';
-        providerDropdown.classList.add('show');
-        activeProviderInput = inputEl;
-    }
-
-    function hideProviderDropdown() {
-        providerDropdown.classList.remove('show');
-        activeProviderInput = null;
-    }
-
-    // 点击下拉选项时选择
-    providerDropdown.addEventListener('mousedown', function(e) {
-        e.preventDefault(); // 防止 input blur 先触发
-        const item = e.target.closest('.provider-dropdown-item');
-        if (!item || item.classList.contains('no-match')) return;
-        const val = item.dataset.value;
-        if (activeProviderInput) {
-            activeProviderInput.value = val;
-            // 触发数据保存
-            activeProviderInput.dispatchEvent(new Event('providerselect', { bubbles: true }));
-        }
-        hideProviderDropdown();
-    });
-
-    // 点击其他地方关闭下拉
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('.provider-cell') && !e.target.closest('#providerDropdown')) {
-            hideProviderDropdown();
-        }
-    });
-
-    // =============================================
-    // 服务商数据加载/保存
-    // =============================================
-    async function loadProviders() {
-        try {
-            const data = await API.get('/settings/providers');
-            if (data.value && Array.isArray(data.value)) {
-                state.providers = data.value;
-            } else {
-                state.providers = [];
-            }
-        } catch (e) {
-            state.providers = [];
-        }
-    }
-
-    async function saveProviders() {
-        await API.post('/settings', { key: 'providers', value: state.providers });
-    }
-
-    // =============================================
-    // 服务商管理弹窗
-    // =============================================
-    function renderProviderList() {
-        if (state.providers.length === 0) {
-            providerListWrap.innerHTML = '<div class="provider-empty">暂无服务商，请添加</div>';
-            return;
-        }
-        providerListWrap.innerHTML = state.providers.map((p, i) =>
-            `<div class="provider-list-item">
-                <span>${escapeHtml(p)}</span>
-                <button class="del-provider-btn" data-index="${i}" title="删除">✕</button>
-            </div>`
-        ).join('');
-        providerListWrap.querySelectorAll('.del-provider-btn').forEach(btn => {
-            btn.addEventListener('click', async function() {
-                const idx = parseInt(this.dataset.index);
-                state.providers.splice(idx, 1);
-                await saveProviders();
-                renderProviderList();
-                providerStatus.textContent = '✅ 已删除';
-                setTimeout(() => providerStatus.textContent = '', 2000);
-            });
-        });
-    }
-
-    async function addProvider() {
-        const name = newProviderInput.value.trim();
-        if (!name) { providerStatus.textContent = '⚠️ 请输入服务商名称'; return; }
-        if (state.providers.includes(name)) { providerStatus.textContent = '⚠️ 已存在该服务商'; return; }
-        state.providers.push(name);
-        await saveProviders();
-        newProviderInput.value = '';
-        renderProviderList();
-        providerStatus.textContent = '✅ 添加成功';
-        setTimeout(() => providerStatus.textContent = '', 2000);
-    }
-
-    manageProvidersBtn.addEventListener('click', async function() {
-        await loadProviders();
-        renderProviderList();
-        providerModal.classList.add('show');
-        newProviderInput.value = '';
-        providerStatus.textContent = '';
-    });
-    closeProviderModal.addEventListener('click', () => providerModal.classList.remove('show'));
-    addProviderBtn.addEventListener('click', addProvider);
-    newProviderInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); addProvider(); }
-    });
 
     // --- 菜单切换 ---
     function initMenu() {
@@ -352,11 +162,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return isNaN(num) ? raw : num;
     }
 
+    // 修正后的支出计算：支持 =50 或 =50+(20) 或 纯数字
     function computeExpenseValue(raw, months) {
         if (raw === null || raw === undefined) return 0;
         const str = String(raw).trim();
         const m = months || 0;
-        const match = str.match(/^=(\d+(?:\.\d+)?)(?:\+\((.+)\))?$/);
+        const match = str.match(/^=(\d+(?:\.\d+)?)(?:\+$(.+)$)?$/);
         if (match) {
             const unitPrice = parseFloat(match[1]) || 0;
             const extraExpr = match[2];
@@ -452,15 +263,23 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) { return expr; }
     }
 
+    async function parseResponse(response) {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `请求失败 (${response.status})`);
+        }
+        return data;
+    }
+
     const API = {
-        get: (url) => fetch('/api' + url, { credentials: 'include' }).then(r => r.json()),
+        get: (url) => fetch('/api' + url, { credentials: 'include' }).then(parseResponse),
         post: (url, data) => fetch('/api' + url, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data)
-        }).then(r => r.json()),
+        }).then(parseResponse),
         put: (url, data) => fetch('/api' + url, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(data)
-        }).then(r => r.json()),
-        delete: (url) => fetch('/api' + url, { method: 'DELETE', credentials: 'include' }).then(r => r.json())
+        }).then(parseResponse),
+        delete: (url) => fetch('/api' + url, { method: 'DELETE', credentials: 'include' }).then(parseResponse)
     };
 
     async function loadTabs() { state.tabs = await API.get('/tabs'); return state.tabs; }
@@ -469,6 +288,23 @@ document.addEventListener('DOMContentLoaded', function() {
         state.records = await API.get('/records?tabId=' + tabId);
         updateAllFilterOptions();
         return state.records;
+    }
+
+    function updateTabCache(tabId) {
+        if (!tabId) return;
+        state.tabCache[tabId] = {
+            columns: state.columns,
+            records: state.records
+        };
+    }
+
+    function invalidateTabCache(tabId) {
+        if (!tabId) return;
+        delete state.tabCache[tabId];
+    }
+
+    function invalidateCurrentTabCache() {
+        invalidateTabCache(state.currentTabId);
     }
 
     function updateAllFilterOptions() {
@@ -497,8 +333,25 @@ document.addEventListener('DOMContentLoaded', function() {
             .sort((a, b) => String(a.value).localeCompare(String(b.value)));
     }
 
-    async function loadDataForTab(tabId) {
-        try { await loadColumns(tabId); await loadRecords(tabId); setStatus(`✅ 已加载 ${state.records.length} 条记录`); }
+    async function loadDataForTab(tabId, force = false) {
+        try {
+            if (!force && state.tabCache[tabId]) {
+                state.columns = state.tabCache[tabId].columns;
+                state.records = state.tabCache[tabId].records;
+                updateAllFilterOptions();
+                setStatus(`✅ 已加载 ${state.records.length} 条记录`);
+                return;
+            }
+            const [columns, records] = await Promise.all([
+                API.get('/columns?tabId=' + tabId),
+                API.get('/records?tabId=' + tabId)
+            ]);
+            state.columns = columns;
+            state.records = records;
+            updateAllFilterOptions();
+            updateTabCache(tabId);
+            setStatus(`✅ 已加载 ${state.records.length} 条记录`);
+        }
         catch (err) { setStatus('❌ 加载失败: ' + err.message); }
     }
 
@@ -506,47 +359,51 @@ document.addEventListener('DOMContentLoaded', function() {
         let html = '';
         state.tabs.forEach(tab => {
             const active = tab.id === state.currentTabId ? 'active' : '';
+            const checked = state.selectedTabs.has(tab.id) ? 'checked' : '';
+            const checkbox = state.tabManageMode
+                ? `<input type="checkbox" class="tab-select" data-tab-id="${tab.id}" ${checked} />`
+                : '';
             html += `<button class="tab-item ${active}" data-tab-id="${tab.id}">
-                <span class="tab-name" data-id="${tab.id}">${tab.name}</span>
-                <span class="tab-close" data-tab-id="${tab.id}">✕</span>
+                ${checkbox}
+                <span class="tab-name" data-id="${tab.id}">${escapeHtml(tab.name)}</span>
             </button>`;
         });
         tabBar.innerHTML = html;
+        if (manageTabsBtn) {
+            manageTabsBtn.classList.toggle('active', state.tabManageMode);
+            manageTabsBtn.textContent = state.tabManageMode ? '完成' : '管理';
+        }
+        tabBar.querySelectorAll('.tab-select').forEach(el => {
+            el.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const tabId = parseInt(this.dataset.tabId);
+                if (this.checked) state.selectedTabs.add(tabId);
+                else state.selectedTabs.delete(tabId);
+            });
+        });
         tabBar.querySelectorAll('.tab-name').forEach(el => {
             el.addEventListener('dblclick', async function(e) {
                 e.stopPropagation();
                 const tabId = parseInt(this.dataset.id);
-                const currentName = this.textContent;
-                const newName = prompt('请输入新标签名称：', currentName);
-                if (newName && newName.trim() && newName.trim() !== currentName) {
-                    await API.put('/tabs/' + tabId, { name: newName.trim() });
-                    const tab = state.tabs.find(t => t.id === tabId);
-                    if (tab) tab.name = newName.trim();
-                    renderTabs();
-                }
+                openRenameTabModal(tabId);
             });
         });
         tabBar.querySelectorAll('.tab-item').forEach(btn => {
             btn.addEventListener('click', function(e) {
-                if (e.target.classList.contains('tab-close') || e.target.classList.contains('tab-name')) return;
+                if (e.target.classList.contains('tab-select')) return;
                 switchTab(parseInt(this.dataset.tabId));
-            });
-            const close = btn.querySelector('.tab-close');
-            if (close) close.addEventListener('click', (e) => {
-                e.stopPropagation();
-                deleteTab(parseInt(close.dataset.tabId));
             });
         });
         if (state.tabs.length === 0) createDefaultTab();
     }
 
-    async function switchTab(tabId) {
-        if (tabId === state.currentTabId) return;
+    async function switchTab(tabId, force = false) {
+        if (tabId === state.currentTabId && !force) return;
         state.currentTabId = tabId;
         state.selectedRows.clear();
         state.filters = {};
-        await loadDataForTab(tabId);
         renderTabs();
+        await loadDataForTab(tabId, force);
         renderTable(false);
         const tab = state.tabs.find(t => t.id === tabId);
         if (tab) document.getElementById('columnModalTabName').textContent = tab.name;
@@ -557,22 +414,84 @@ document.addEventListener('DOMContentLoaded', function() {
         if (result.success) {
             state.tabs.push({ id: result.id, name });
             renderTabs();
-            switchTab(result.id);
+            switchTab(result.id, true);
         }
     }
     async function createDefaultTab() { await createTab('默认'); }
-    async function deleteTab(tabId) {
-        if (!confirm('确定删除此标签及其所有数据吗？')) return;
-        await API.delete('/tabs/' + tabId);
-        state.tabs = state.tabs.filter(t => t.id !== tabId);
-        if (state.currentTabId === tabId) state.currentTabId = state.tabs.length > 0 ? state.tabs[0].id : null;
-        renderTabs();
-        if (state.currentTabId) await switchTab(state.currentTabId);
-        else await createDefaultTab();
+    async function deleteTabs(tabIds) {
+        if (!tabIds || tabIds.length === 0) { setStatus('⚠️ 请先在管理模式中勾选标签'); return; }
+        if (!confirm(`确定删除 ${tabIds.length} 个标签及其所有数据吗？`)) return;
+        try {
+            setStatus('🔄 删除标签中...');
+            await Promise.all(tabIds.map(tabId => API.delete('/tabs/' + tabId)));
+            tabIds.forEach(tabId => {
+                invalidateTabCache(tabId);
+                state.selectedTabs.delete(tabId);
+            });
+            state.tabs = state.tabs.filter(t => !tabIds.includes(t.id));
+            if (!state.tabs.some(t => t.id === state.currentTabId)) {
+                state.currentTabId = state.tabs.length > 0 ? state.tabs[0].id : null;
+            }
+            renderTabs();
+            if (state.currentTabId) await switchTab(state.currentTabId, true);
+            else await createDefaultTab();
+            setStatus(`✅ 已删除 ${tabIds.length} 个标签`);
+        } catch (err) { setStatus('❌ 删除标签失败: ' + err.message); }
     }
     addTabBtn.addEventListener('click', () => {
-        const name = prompt('请输入新标签名称：', '新标签');
-        if (name && name.trim()) createTab(name.trim());
+        state.renameTabId = null;
+        renameTabInput.value = '新标签';
+        renameTabStatus.textContent = '';
+        renameTabModal.classList.add('show');
+        setTimeout(() => renameTabInput.select(), 0);
+    });
+    manageTabsBtn.addEventListener('click', () => {
+        state.tabManageMode = !state.tabManageMode;
+        if (!state.tabManageMode) state.selectedTabs.clear();
+        renderTabs();
+    });
+    deleteTabsBtn.addEventListener('click', () => deleteTabs(Array.from(state.selectedTabs)));
+
+    function openRenameTabModal(tabId) {
+        const tab = state.tabs.find(t => t.id === tabId);
+        if (!tab) return;
+        state.renameTabId = tabId;
+        renameTabInput.value = tab.name;
+        renameTabStatus.textContent = '';
+        renameTabModal.classList.add('show');
+        setTimeout(() => renameTabInput.select(), 0);
+    }
+
+    function closeRenameModal() {
+        renameTabModal.classList.remove('show');
+        renameTabStatus.textContent = '';
+    }
+
+    async function saveRenameTab() {
+        const name = renameTabInput.value.trim();
+        if (!name) { renameTabStatus.textContent = '⚠️ 标签名称不能为空'; return; }
+        try {
+            if (state.renameTabId) {
+                await API.put('/tabs/' + state.renameTabId, { name });
+                const tab = state.tabs.find(t => t.id === state.renameTabId);
+                if (tab) tab.name = name;
+                renderTabs();
+                closeRenameModal();
+                setStatus('✅ 标签名称已更新');
+            } else {
+                await createTab(name);
+                closeRenameModal();
+                setStatus('✅ 标签已添加');
+            }
+        } catch (err) { renameTabStatus.textContent = '❌ 保存失败: ' + err.message; }
+    }
+
+    closeRenameTabModal.addEventListener('click', closeRenameModal);
+    cancelRenameTabBtn.addEventListener('click', closeRenameModal);
+    saveRenameTabBtn.addEventListener('click', saveRenameTab);
+    renameTabInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') saveRenameTab();
+        if (e.key === 'Escape') closeRenameModal();
     });
 
     function normalizeFilterValue(value) {
@@ -594,7 +513,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 渲染表格
+    // 渲染表格（刷新时不自动适配列宽）
     function renderTable(shouldAutoFit = false) {
         if (!state.currentTabId) return;
         const visibleColumns = state.columns.filter(c => c.col_visible !== 0);
@@ -606,7 +525,9 @@ document.addEventListener('DOMContentLoaded', function() {
             let incomeLabel = isIncome === 1 ? '💰' : (isIncome === 2 ? '💸' : '');
             const hasFilter = isFilterActive(col.col_key) ? 'filter-active' : '';
             const savedWidth = col.col_width;
-            const width = (savedWidth && savedWidth !== 150) ? savedWidth : calcColumnWidth(col);
+            const width = shouldAutoFit
+                ? ((savedWidth && savedWidth !== 150) ? savedWidth : calcColumnWidth(col))
+                : (savedWidth || 150);
             const displayName = getColumnDisplayName(col);
             theadHtml += `
                 <th data-col="${escapeAttr(col.col_key)}" style="width:${width}px;min-width:${width}px;max-width:${width}px;">
@@ -704,20 +625,6 @@ document.addEventListener('DOMContentLoaded', function() {
                             <input type="text" class="cell-input fee-input" value="${escapeAttr(rawValue)}" style="display:none;" />
                         </div>
                     `;
-                } else if (colKey === 'provider') {
-                    // 服务商列：可搜索下拉输入框
-                    inputHtml = `
-                        <div class="provider-cell">
-                            <input type="text"
-                                class="cell-input provider-input"
-                                data-col="${escapeAttr(colKey)}"
-                                data-id="${record.id}"
-                                value="${escapeAttr(val || '')}"
-                                placeholder="点击选择或输入"
-                                autocomplete="off"
-                            />
-                        </div>
-                    `;
                 } else {
                     const inputType = col.col_type === 'number' ? 'number' : 'text';
                     const step = col.col_type === 'number' ? 'step="0.01"' : '';
@@ -733,7 +640,6 @@ document.addEventListener('DOMContentLoaded', function() {
         bindTableEvents();
         bindFilterEvents();
         bindSpecialEvents();
-        bindProviderInputEvents();
 
         if (shouldAutoFit) autoFitColumns();
     }
@@ -754,77 +660,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // =============================================
-    // 服务商输入框事件绑定
-    // =============================================
-    function bindProviderInputEvents() {
-        $$('.provider-input').forEach(input => {
-            // 点击或获焦时显示全部列表
-            input.addEventListener('focus', function() {
-                showProviderDropdown(this, this.value);
-            });
-            input.addEventListener('click', function() {
-                showProviderDropdown(this, this.value);
-            });
-            // 输入时实时过滤
-            input.addEventListener('input', function() {
-                showProviderDropdown(this, this.value);
-            });
-            // 键盘导航
-            input.addEventListener('keydown', function(e) {
-                const items = providerDropdown.querySelectorAll('.provider-dropdown-item:not(.no-match)');
-                const activeItem = providerDropdown.querySelector('.provider-dropdown-item.active');
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    if (!providerDropdown.classList.contains('show')) {
-                        showProviderDropdown(this, this.value);
-                        return;
-                    }
-                    if (!activeItem) {
-                        if (items[0]) items[0].classList.add('active');
-                    } else {
-                        const idx = Array.from(items).indexOf(activeItem);
-                        activeItem.classList.remove('active');
-                        if (items[idx + 1]) items[idx + 1].classList.add('active');
-                    }
-                } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    if (!activeItem) return;
-                    const idx = Array.from(items).indexOf(activeItem);
-                    activeItem.classList.remove('active');
-                    if (idx > 0 && items[idx - 1]) items[idx - 1].classList.add('active');
-                } else if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (activeItem) {
-                        this.value = activeItem.dataset.value;
-                        this.dispatchEvent(new Event('providerselect', { bubbles: true }));
-                        hideProviderDropdown();
-                    } else {
-                        // 没有选中项，直接保存当前输入的值
-                        this.dispatchEvent(new Event('providerselect', { bubbles: true }));
-                        hideProviderDropdown();
-                    }
-                } else if (e.key === 'Escape') {
-                    hideProviderDropdown();
-                } else if (e.key === 'Tab') {
-                    hideProviderDropdown();
-                }
-            });
-            // blur 时保存（mousedown 选项已 preventDefault 不会触发 blur）
-            input.addEventListener('blur', function() {
-                setTimeout(() => {
-                    hideProviderDropdown();
-                    handleCellChange(this);
-                }, 150);
-            });
-            // providerselect 自定义事件：选项被点击选中时保存
-            input.addEventListener('providerselect', function() {
-                handleCellChange(this);
-            });
-        });
-    }
-
-    // --- 筛选面板 ---
+    // --- 筛选面板动态生成 ---
     function getOrCreateFilterPanel(colKey) {
         let panel = document.querySelector(`.col-dropdown-panel[data-col="${colKey}"]`);
         if (!panel) {
@@ -918,6 +754,7 @@ document.addEventListener('DOMContentLoaded', function() {
         updateFilterSummary(panel);
     }
 
+    // 修正后的计数：基于可见选项
     function updateFilterSummary(panel) {
         const summary = panel.querySelector('.filter-summary');
         if (!summary) return;
@@ -967,6 +804,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     checkedValues = allCbs.filter(cb => cb.checked).map(cb => cb.value);
                 } else {
                     // 有搜索关键字时：只把【当前可见且勾选】的值作为筛选结果
+                    // 不合并隐藏项，用户搜索后勾选什么就只显示什么
                     const visibleCbs = allCbs.filter(cb => {
                         const label = cb.closest('.filter-option-label');
                         return label && label.style.display !== 'none';
@@ -975,8 +813,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 if (checkedValues.length === 0) {
+                    // 没有选中任何项，不做筛选（清除该列筛选）
                     delete state.filters[colKey];
                 } else if (checkedValues.length === allValues.length) {
+                    // 全部都选了，等于没有筛选
                     delete state.filters[colKey];
                 } else {
                     state.filters[colKey] = checkedValues;
@@ -1013,7 +853,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // 筛选面板搜索框过滤
+        // 搜索过滤
         document.body.addEventListener('input', function(e) {
             if (e.target.classList.contains('filter-search')) {
                 const panel = e.target.closest('.col-dropdown-panel');
@@ -1059,7 +899,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input):not(.provider-input)').forEach(input => {
+        $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
             input.onblur = () => handleCellChange(input);
             input.onkeydown = (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
@@ -1211,10 +1051,10 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        // 支出
+        // 支出交互（点击显示文字切换为编辑）
         $$('.expense-display').forEach(display => {
             display.addEventListener('click', function(e) {
-                const parent = this.parentElement;
+                const parent = this.parentElement; // .expense-inline
                 const input = parent.querySelector('.expense-input');
                 const td = parent.closest('td');
                 this.style.display = 'none';
@@ -1233,23 +1073,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 const id = parseInt(parent.closest('tr').dataset.id);
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
+
                 const rawValue = input.value.trim();
                 record.data['expense'] = rawValue || '0';
                 record._updated = true;
+
                 const months = parseInt(record.data.months) || 0;
                 const computed = Math.round(computeExpenseValue(rawValue, months));
                 display.textContent = computed;
+
                 input.style.display = 'none';
                 display.style.display = 'inline';
                 td.classList.remove('editing-cell');
+
                 if (record._saveTimeout) clearTimeout(record._saveTimeout);
                 record._saveTimeout = setTimeout(() => saveRecord(record), 300);
                 updateFilterOptionsForCol('expense');
                 renderTable(false);
             };
+
             input.addEventListener('blur', finishEditing);
             input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') { e.preventDefault(); finishEditing(); }
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    finishEditing();
+                }
                 if (e.key === 'Escape') {
                     const parent = input.closest('.expense-inline');
                     const display = parent.querySelector('.expense-display');
@@ -1261,11 +1109,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.blur();
                 }
             });
-            input.addEventListener('focus', function() { const td = this.closest('td'); if (td) td.classList.add('editing-cell'); });
-            input.addEventListener('blur', function() { const td = this.closest('td'); if (td) td.classList.remove('editing-cell'); });
+            input.addEventListener('focus', function() {
+                const td = this.closest('td');
+                if (td) td.classList.add('editing-cell');
+            });
+            input.addEventListener('blur', function() {
+                const td = this.closest('td');
+                if (td) td.classList.remove('editing-cell');
+            });
         });
 
-        // 收入
+        // 收入交互（同样处理）
         $$('.fee-display').forEach(display => {
             display.addEventListener('click', function(e) {
                 const parent = this.parentElement;
@@ -1288,23 +1142,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 const id = parseInt(parent.dataset.id);
                 const record = state.records.find(r => r.id === id);
                 if (!record) return;
+
                 const rawValue = input.value.trim();
                 record.data[colKey] = rawValue;
                 record._updated = true;
+
                 const computed = computeFeeValue(rawValue);
                 const displayText = (computed !== '' && computed !== null && !isNaN(Number(computed))) ? Number(computed) : (computed || '0');
                 display.textContent = String(displayText);
+
                 input.style.display = 'none';
                 display.style.display = 'inline';
                 td.classList.remove('editing-cell');
+
                 if (record._saveTimeout) clearTimeout(record._saveTimeout);
                 record._saveTimeout = setTimeout(() => saveRecord(record), 300);
                 updateFilterOptionsForCol(colKey);
                 renderTable(false);
             };
+
             input.addEventListener('blur', finishEditing);
             input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') { e.preventDefault(); finishEditing(); }
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    finishEditing();
+                }
                 if (e.key === 'Escape') {
                     const parent = input.closest('.fee-control');
                     const display = parent.querySelector('.fee-display');
@@ -1316,8 +1178,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     input.blur();
                 }
             });
-            input.addEventListener('focus', function() { const td = this.closest('td'); if (td) td.classList.add('editing-cell'); });
-            input.addEventListener('blur', function() { const td = this.closest('td'); if (td) td.classList.remove('editing-cell'); });
+            input.addEventListener('focus', function() {
+                const td = this.closest('td');
+                if (td) td.classList.add('editing-cell');
+            });
+            input.addEventListener('blur', function() {
+                const td = this.closest('td');
+                if (td) td.classList.remove('editing-cell');
+            });
         });
     }
 
@@ -1355,11 +1223,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (record._saveTimeout) clearTimeout(record._saveTimeout);
         record._saveTimeout = setTimeout(() => saveRecord(record), 300);
-
-        // 服务商列不需要 renderTable 防止下拉被关掉
-        if (colKey !== 'provider') {
-            renderTable(false);
-        }
+        renderTable(false);
     }
 
     function saveRecord(record) {
@@ -1399,6 +1263,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const result = await API.post('/records', { tab_id: state.currentTabId, data });
             const newRecord = { id: result.id, data };
             state.records.unshift(newRecord);
+            updateTabCache(state.currentTabId);
             renderTable(false);
             setStatus('✅ 添加成功');
             const firstInput = document.querySelector('.cell-input');
@@ -1415,6 +1280,7 @@ document.addEventListener('DOMContentLoaded', function() {
             await API.post('/records/batch-delete', { ids });
             state.records = state.records.filter(r => !ids.includes(r.id));
             state.selectedRows.clear();
+            updateTabCache(state.currentTabId);
             renderTable(false);
             setStatus(`✅ 已删除 ${ids.length} 条记录`);
         } catch (err) { setStatus('❌ 删除失败: ' + err.message); }
@@ -1484,7 +1350,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (records.length === 0) throw new Error('无有效数据');
             importStatus.textContent = `🔄 导入 ${records.length} 条...`;
             await API.post('/records/import', { tab_id: state.currentTabId, records });
-            await loadDataForTab(state.currentTabId);
+            invalidateCurrentTabCache();
+            await loadDataForTab(state.currentTabId, true);
             renderTable(false);
             importStatus.textContent = `✅ 成功导入 ${records.length} 条`;
             setTimeout(() => importModal.classList.remove('show'), 1500);
@@ -1575,6 +1442,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 try {
                     await API.post('/columns/reorder', { orderMap });
                     state.columns = cols;
+                    updateTabCache(state.currentTabId);
                     renderColumnList();
                     renderTable(false);
                     setStatus('✅ 顺序已更新');
@@ -1596,6 +1464,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 try {
                     await API.put('/columns/' + id, { is_income: newVal });
                     col.is_income = newVal;
+                    updateTabCache(state.currentTabId);
                     renderColumnList();
                     renderTable(false);
                     setStatus('✅ 标记已更新');
@@ -1608,6 +1477,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             await API.put('/columns/' + id, { col_visible: currentVisible === 1 ? 0 : 1 });
             await loadColumns(state.currentTabId);
+            updateTabCache(state.currentTabId);
             renderColumnList();
             renderTable(false);
             setStatus('✅ 列状态已更新');
@@ -1618,6 +1488,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             await API.delete('/columns/' + id);
             await loadColumns(state.currentTabId);
+            updateTabCache(state.currentTabId);
             renderColumnList();
             renderTable(false);
             setStatus('✅ 列已删除');
@@ -1629,9 +1500,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const type = newColType.value;
         if (!name) { setStatus('⚠️ 请输入列名称'); return; }
         if (!state.currentTabId) { setStatus('⚠️ 请先选择一个标签'); return; }
+
         const ts = Date.now();
         const rand = Math.random().toString(36).substring(2, 6);
         const key = `col_${ts}_${rand}`;
+
         try {
             const result = await API.post('/columns', {
                 tab_id: state.currentTabId,
@@ -1643,6 +1516,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (result.success) {
                 newColName.value = '';
                 await loadColumns(state.currentTabId);
+                updateTabCache(state.currentTabId);
                 renderColumnList();
                 renderTable(false);
                 setStatus('✅ 列添加成功');
@@ -1807,7 +1681,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             await loadRegisterSwitch();
             await loadSuffixSettings();
-            await loadProviders();
             const auth = await API.get('/auth/check');
             if (auth.loggedIn && auth.user.id === 1) registerSwitchGroup.style.display = 'block';
         } catch (err) { console.warn('加载设置失败:', err); }
@@ -1819,7 +1692,10 @@ document.addEventListener('DOMContentLoaded', function() {
     exportBtn.addEventListener('click', exportData);
     importBtn.addEventListener('click', showImportModal);
     refreshBtn.addEventListener('click', function() {
-        if (state.currentTabId) loadDataForTab(state.currentTabId).then(() => renderTable(false));
+        if (state.currentTabId) {
+            invalidateCurrentTabCache();
+            loadDataForTab(state.currentTabId, true).then(() => renderTable(false));
+        }
     });
     manageColumnsBtn.addEventListener('click', showColumnManager);
     logoutBtn.addEventListener('click', async function() {
