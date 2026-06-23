@@ -116,6 +116,9 @@ body {
     font-size: 14px;
     color: #666;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 .tab-item:hover { color:#333; background:#f5f7fa; }
 .tab-item.active {
@@ -123,22 +126,35 @@ body {
     border-bottom-color: #4a6cf7;
     font-weight: 500;
 }
-.tab-item .tab-close {
-    margin-left: 6px;
-    color: #ccc;
-    cursor: pointer;
-    font-size: 12px;
+.tab-select {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
 }
-.tab-item .tab-close:hover { color:#e74c3c; }
-.add-tab-btn {
-    background: transparent;
-    border: none;
-    font-size: 20px;
-    cursor: pointer;
-    color: #999;
-    padding: 0 8px;
+.tab-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 12px;
+    flex-shrink: 0;
 }
-.add-tab-btn:hover { color:#333; }
+.tab-action-btn {
+    border: 1px solid #dcdfe6;
+    background: #fff;
+    color: #606266;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.tab-action-btn:hover { background:#f5f7fa; border-color:#c0c4cc; }
+.tab-action-btn.primary { background:#4a6cf7; border-color:#4a6cf7; color:#fff; }
+.tab-action-btn.primary:hover { background:#3a5cd7; }
+.tab-action-btn.danger { color:#f56c6c; border-color:#f56c6c; }
+.tab-action-btn.danger:hover { background:#fef0f0; }
+.tab-action-btn.active { background:#ecf5ff; border-color:#4a6cf7; color:#4a6cf7; }
 
 /* 工具栏 */
 .tab-toolbar {
@@ -635,6 +651,7 @@ body {
 }
 @keyframes slideUp { from { transform:translateY(30px); opacity:0; } to { transform:translateY(0); opacity:1; } }
 .modal-sm { max-width:480px; }
+.modal-xs { max-width:360px; }
 .modal-header {
     display: flex;
     align-items: center;
@@ -658,6 +675,35 @@ body {
     padding: 24px;
     overflow-y: auto;
     flex:1;
+}
+.rename-tab-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.rename-tab-form label {
+    font-size: 13px;
+    color: #606266;
+    font-weight: 500;
+}
+.rename-tab-form input {
+    padding: 8px 12px;
+    border: 1px solid #dcdfe6;
+    border-radius: 4px;
+    font-size: 14px;
+    outline: none;
+}
+.rename-tab-form input:focus { border-color:#4a6cf7; }
+.rename-tab-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+#renameTabStatus {
+    min-height: 18px;
+    font-size: 13px;
+    color: #f56c6c;
 }
 
 /* 列管理 */
