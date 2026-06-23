@@ -1,5 +1,5 @@
 const express = require('express');
-const { query, queryOne, execute } = require('../db');
+const { query, queryOne, execute, getDB } = require('../db');
 
 const router = express.Router();
 
@@ -109,6 +109,7 @@ router.post('/import', requireAuth, async (req, res) => {
             return res.status(400).json({ error: '请提供要导入的数据' });
         }
 
+        const db = getDB();
         const stmt = db.prepare('INSERT INTO records (user_id, tab_id, data) VALUES (?, ?, ?)');
         let count = 0;
         for (const record of records) {
