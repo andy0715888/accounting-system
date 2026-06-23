@@ -6,6 +6,116 @@
     <title>记账系统</title>
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/css/main.css">
+    <style>
+        /* 服务商下拉搜索组件样式 */
+        .provider-cell {
+            position: relative;
+            width: 100%;
+        }
+        .provider-input {
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 13px;
+            cursor: pointer;
+            background: #fff;
+            outline: none;
+        }
+        .provider-input:focus {
+            border-color: #409eff;
+            box-shadow: 0 0 0 2px rgba(64,158,255,0.15);
+        }
+        .provider-dropdown {
+            position: fixed;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            z-index: 99999;
+            min-width: 160px;
+            max-height: 220px;
+            overflow-y: auto;
+            display: none;
+        }
+        .provider-dropdown.show { display: block; }
+        .provider-dropdown-item {
+            padding: 7px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #333;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .provider-dropdown-item:last-child { border-bottom: none; }
+        .provider-dropdown-item:hover, .provider-dropdown-item.active {
+            background: #ecf5ff;
+            color: #409eff;
+        }
+        .provider-dropdown-item.no-match {
+            color: #999;
+            cursor: default;
+            font-size: 12px;
+        }
+        .provider-dropdown-item.no-match:hover { background: #fff; color: #999; }
+        /* 高亮匹配文字 */
+        .provider-dropdown-item mark {
+            background: #ffe58f;
+            color: #333;
+            padding: 0;
+            border-radius: 2px;
+        }
+
+        /* 服务商管理弹窗样式 */
+        .provider-list-wrap {
+            max-height: 320px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 6px;
+            margin-bottom: 12px;
+        }
+        .provider-list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+        }
+        .provider-list-item:last-child { border-bottom: none; }
+        .provider-list-item:hover { background: #f9f9f9; }
+        .provider-list-item span { flex: 1; }
+        .provider-list-item .del-provider-btn {
+            background: none;
+            border: none;
+            color: #f56c6c;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0 4px;
+            line-height: 1;
+        }
+        .provider-list-item .del-provider-btn:hover { color: #c0392b; }
+        .provider-add-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .provider-add-row input {
+            flex: 1;
+            padding: 7px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+        }
+        .provider-add-row input:focus { border-color: #409eff; }
+        .provider-empty {
+            text-align: center;
+            color: #999;
+            padding: 24px 0;
+            font-size: 13px;
+        }
+    </style>
 </head>
 <body>
     <header class="navbar">
@@ -48,6 +158,7 @@
                         <span class="tool-divider"></span>
                         <button class="tool-btn" id="manageColumnsBtn">📋 列管理</button>
                         <button class="tool-btn" id="addressSuffixBtn">🔗 地址后缀</button>
+                        <button class="tool-btn" id="manageProvidersBtn">🏢 服务商管理</button>
                     </div>
                     <div class="toolbar-right">
                         <span class="record-count" id="recordCount">共 0 条记录</span>
@@ -126,6 +237,7 @@
         </div>
     </div>
 
+    <!-- 列管理弹窗 -->
     <div class="modal-overlay" id="columnModal">
         <div class="modal">
             <div class="modal-header">
@@ -152,6 +264,7 @@
         </div>
     </div>
 
+    <!-- 导入弹窗 -->
     <div class="modal-overlay" id="importModal">
         <div class="modal modal-sm">
             <div class="modal-header">
@@ -170,6 +283,7 @@
         </div>
     </div>
 
+    <!-- 地址后缀弹窗 -->
     <div class="modal-overlay" id="addressSuffixModal">
         <div class="modal modal-sm">
             <div class="modal-header">
@@ -186,6 +300,30 @@
             </div>
         </div>
     </div>
+
+    <!-- 服务商管理弹窗 -->
+    <div class="modal-overlay" id="providerModal">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <h2>🏢 服务商管理</h2>
+                <button class="modal-close" id="closeProviderModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="setting-desc" style="margin-bottom:10px;">在此管理服务商列表，"服务商"列输入框会使用此列表作为下拉选项，支持中英文及拼音首字母搜索。</p>
+                <div class="provider-list-wrap" id="providerListWrap">
+                    <div class="provider-empty">暂无服务商，请添加</div>
+                </div>
+                <div class="provider-add-row">
+                    <input type="text" id="newProviderInput" placeholder="输入服务商名称，回车添加" maxlength="50" />
+                    <button class="tool-btn primary" id="addProviderBtn">添加</button>
+                </div>
+                <span id="providerStatus" style="font-size:13px;margin-top:8px;display:block;"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 服务商下拉搜索浮层（全局唯一） -->
+    <div class="provider-dropdown" id="providerDropdown"></div>
 
     <div class="status-bar"><span id="statusText">就绪</span></div>
 
