@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tabManageMode: false,
         selectedTabs: new Set(),
         renameTabId: null,
+        providerOptions: [],
         isLoaded: false,
         userName: '',
         isAdmin: false,
@@ -77,6 +78,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const saveRenameTabBtn = $('#saveRenameTabBtn');
     const cancelRenameTabBtn = $('#cancelRenameTabBtn');
     const renameTabStatus = $('#renameTabStatus');
+    const providerModal = $('#providerModal');
+    const closeProviderModal = $('#closeProviderModal');
+    const providerNameInput = $('#providerNameInput');
+    const addProviderBtn = $('#addProviderBtn');
+    const providerList = $('#providerList');
+    const providerStatus = $('#providerStatus');
 
     let filterDocumentClickBound = false;
 
@@ -162,20 +169,34 @@ document.addEventListener('DOMContentLoaded', function() {
         return isNaN(num) ? raw : num;
     }
 
-    // 修正后的支出计算：支持 =50 或 =50+(20) 或 纯数字
+    // 支出计算：支持纯数字（月数×单价）、=数字（月数×单价）、=数字+(表达式) 如 =50+(50-25)
     function computeExpenseValue(raw, months) {
         if (raw === null || raw === undefined) return 0;
         const str = String(raw).trim();
+        if (str === '') return 0;
         const m = months || 0;
-        const match = str.match(/^=(\d+(?:\.\d+)?)(?:\+$(.+)$)?$/);
-        if (match) {
-            const unitPrice = parseFloat(match[1]) || 0;
-            const extraExpr = match[2];
-            const extra = extraExpr ? safeEval(extraExpr) : 0;
+
+        // =数字+(表达式) 格式：如 =50+(50-25) → 月数×50 + (50-25)
+        const matchComplex = str.match(/^=(\d+(?:\.\d+)?)\s*\+\s*$(.+)$$/);
+        if (matchComplex) {
+            const unitPrice = parseFloat(matchComplex[1]) || 0;
+            const extraExpr = matchComplex[2].trim();
+            const extra = safeEval(extraExpr);
             return m * unitPrice + extra;
         }
+
+        // =数字 格式：如 =50 → 月数×50
+        const matchSimple = str.match(/^=(\d+(?:\.\d+)?)$/);
+        if (matchSimple) {
+            const unitPrice = parseFloat(matchSimple[1]) || 0;
+            return m * unitPrice;
+        }
+
+        // 纯数字
         const num = parseFloat(str);
         if (!isNaN(num)) return m * num;
+
+        // 其他公式尝试计算
         return safeEval(str);
     }
 
@@ -261,6 +282,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (typeof result === 'number' && !isNaN(result)) return result;
             return expr;
         } catch (e) { return expr; }
+    }
+
+    function normalizeProviderOptions(arr) {
+        return [...new Set(arr.filter(n => n && typeof n === 'string'))].sort((a,b) => a.localeCompare(b));
     }
 
     async function parseResponse(response) {
@@ -625,6 +650,15 @@ document.addEventListener('DOMContentLoaded', function() {
                             <input type="text" class="cell-input fee-input" value="${escapeAttr(rawValue)}" style="display:none;" />
                         </div>
                     `;
+                } else if (colKey === 'provider') {
+                    const currentProvider = val || '';
+                    const providerOptions = [...state.providerOptions];
+                    if (currentProvider && !providerOptions.includes(currentProvider)) providerOptions.push(currentProvider);
+                    const options = providerOptions.map(opt => `<option value="${escapeAttr(opt)}" ${currentProvider === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('');
+                    inputHtml = `<select class="cell-input select-cell provider-select" data-col="${escapeAttr(colKey)}" data-id="${record.id}">
+                        <option value="">-</option>${options}
+                        <option value="__manage_provider__">服务商管理...</option>
+                    </select>`;
                 } else {
                     const inputType = col.col_type === 'number' ? 'number' : 'text';
                     const step = col.col_type === 'number' ? 'step="0.01"' : '';
@@ -754,7 +788,6 @@ document.addEventListener('DOMContentLoaded', function() {
         updateFilterSummary(panel);
     }
 
-    // 修正后的计数：基于可见选项
     function updateFilterSummary(panel) {
         const summary = panel.querySelector('.filter-summary');
         if (!summary) return;
@@ -800,11 +833,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 let checkedValues;
                 if (searchText === '') {
-                    // 无搜索：直接读全部勾选状态
                     checkedValues = allCbs.filter(cb => cb.checked).map(cb => cb.value);
                 } else {
-                    // 有搜索关键字时：只把【当前可见且勾选】的值作为筛选结果
-                    // 不合并隐藏项，用户搜索后勾选什么就只显示什么
                     const visibleCbs = allCbs.filter(cb => {
                         const label = cb.closest('.filter-option-label');
                         return label && label.style.display !== 'none';
@@ -813,10 +843,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 if (checkedValues.length === 0) {
-                    // 没有选中任何项，不做筛选（清除该列筛选）
                     delete state.filters[colKey];
                 } else if (checkedValues.length === allValues.length) {
-                    // 全部都选了，等于没有筛选
                     delete state.filters[colKey];
                 } else {
                     state.filters[colKey] = checkedValues;
@@ -853,7 +881,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // 搜索过滤
         document.body.addEventListener('input', function(e) {
             if (e.target.classList.contains('filter-search')) {
                 const panel = e.target.closest('.col-dropdown-panel');
@@ -899,7 +926,7 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
-        $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input)').forEach(input => {
+        $$('.cell-input:not(.address-select):not(.months-input):not(.date-input):not(.expense-input):not(.fee-input):not(.provider-select)').forEach(input => {
             input.onblur = () => handleCellChange(input);
             input.onkeydown = (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
@@ -1051,10 +1078,34 @@ document.addEventListener('DOMContentLoaded', function() {
             };
         });
 
+        // 服务商下拉特殊处理
+        $$('.provider-select').forEach(sel => {
+            sel.onchange = function() {
+                if (this.value === '__manage_provider__') {
+                    openProviderManager();
+                    this.value = this.dataset.prevValue || '';
+                    return;
+                }
+                this.dataset.prevValue = this.value;
+                const colKey = this.dataset.col;
+                const id = parseInt(this.dataset.id);
+                const record = state.records.find(r => r.id === id);
+                if (!record) return;
+                record.data[colKey] = this.value;
+                record._updated = true;
+                if (record._saveTimeout) clearTimeout(record._saveTimeout);
+                record._saveTimeout = setTimeout(() => saveRecord(record), 300);
+                renderTable(false);
+                updateFilterOptionsForCol(colKey);
+            };
+            // 初始化 prevValue
+            sel.dataset.prevValue = sel.value;
+        });
+
         // 支出交互（点击显示文字切换为编辑）
         $$('.expense-display').forEach(display => {
             display.addEventListener('click', function(e) {
-                const parent = this.parentElement; // .expense-inline
+                const parent = this.parentElement;
                 const input = parent.querySelector('.expense-input');
                 const td = parent.closest('td');
                 this.style.display = 'none';
@@ -1119,7 +1170,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 收入交互（同样处理）
+        // 收入交互
         $$('.fee-display').forEach(display => {
             display.addEventListener('click', function(e) {
                 const parent = this.parentElement;
@@ -1195,7 +1246,7 @@ document.addEventListener('DOMContentLoaded', function() {
         let val = input.value;
         const col = state.columns.find(c => c.col_key === colKey);
         if (!col) return;
-        if (colKey === 'expense' || colKey === 'fee' || colKey === 'host_expire' || col.col_type === 'days_remaining' || colKey === 'is_expired') return;
+        if (colKey === 'expense' || colKey === 'fee' || colKey === 'host_expire' || col.col_type === 'days_remaining' || colKey === 'is_expired' || colKey === 'provider') return;
 
         const record = state.records.find(r => r.id === id);
         if (!record) return;
@@ -1662,6 +1713,88 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (err) { document.getElementById('faviconStatus').textContent = '❌ 上传失败: ' + err.message; }
     }
 
+    // --- 服务商管理 ---
+    function addProviderFromColumn(colKey) {
+        if (!state.columns.some(c => c.col_key === 'provider')) return;
+        const recordProviders = new Set();
+        state.records.forEach(r => {
+            const p = r.data.provider;
+            if (p && p.trim()) recordProviders.add(p.trim());
+        });
+        const values = Array.from(recordProviders);
+        state.providerOptions = normalizeProviderOptions([...state.providerOptions, ...values]);
+    }
+
+    async function loadProviderOptions() {
+        try {
+            const data = await API.get('/settings/provider_options');
+            state.providerOptions = normalizeProviderOptions(Array.isArray(data.value) ? data.value : []);
+        } catch (err) {
+            state.providerOptions = [];
+        }
+    }
+
+    async function saveProviderOptions() {
+        await API.post('/settings', { key: 'provider_options', value: state.providerOptions });
+    }
+
+    function renderProviderList() {
+        if (state.providerOptions.length === 0) {
+            providerList.innerHTML = '<div style="color:#909399;text-align:center;padding:20px 0;">暂无服务商，请添加</div>';
+            return;
+        }
+        providerList.innerHTML = state.providerOptions.map(name => `
+            <div class="provider-item">
+                <span class="provider-name">${escapeHtml(name)}</span>
+                <button class="provider-del-btn" data-name="${escapeAttr(name)}">删除</button>
+            </div>
+        `).join('');
+        providerList.querySelectorAll('.provider-del-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const name = this.dataset.name;
+                state.providerOptions = state.providerOptions.filter(item => item !== name);
+                await saveProviderOptions();
+                renderProviderList();
+                renderTable(false);
+                setStatus(`✅ 已移除服务商「${name}」`);
+            });
+        });
+    }
+
+    function openProviderManager() {
+        renderProviderList();
+        providerNameInput.value = '';
+        providerStatus.textContent = '';
+        providerModal.classList.add('show');
+        setTimeout(() => providerNameInput.focus(), 0);
+    }
+
+    async function addProvider() {
+        const name = providerNameInput.value.trim();
+        if (!name) { providerStatus.textContent = '⚠️ 请输入服务商名称'; return; }
+        if (state.providerOptions.includes(name)) { providerStatus.textContent = '⚠️ 服务商已存在'; return; }
+        try {
+            state.providerOptions.unshift(name);
+            state.providerOptions = normalizeProviderOptions(state.providerOptions);
+            await saveProviderOptions();
+            renderProviderList();
+            providerNameInput.value = '';
+            providerStatus.textContent = `✅ 已添加「${name}」`;
+            renderTable(false);
+            setTimeout(() => providerStatus.textContent = '', 2000);
+            providerNameInput.focus();
+        } catch (err) {
+            providerStatus.textContent = '❌ 添加失败: ' + err.message;
+        }
+    }
+
+    closeProviderModal.addEventListener('click', () => providerModal.classList.remove('show'));
+    addProviderBtn.addEventListener('click', addProvider);
+    providerNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') addProvider();
+        if (e.key === 'Escape') providerModal.classList.remove('show');
+    });
+
     // --- 加载设置 ---
     async function loadSettings() {
         try {
@@ -1681,6 +1814,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             await loadRegisterSwitch();
             await loadSuffixSettings();
+            await loadProviderOptions();
+            addProviderFromColumn('provider');
             const auth = await API.get('/auth/check');
             if (auth.loggedIn && auth.user.id === 1) registerSwitchGroup.style.display = 'block';
         } catch (err) { console.warn('加载设置失败:', err); }
