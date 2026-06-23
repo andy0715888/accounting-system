@@ -676,8 +676,6 @@ body {
     overflow-y: auto;
     flex:1;
 }
-
-/* 重命名标签弹窗 */
 .rename-tab-form {
     display: flex;
     flex-direction: column;
@@ -712,10 +710,11 @@ body {
 .provider-manager {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 12px;
 }
 .provider-add-row {
     display: flex;
+    align-items: center;
     gap: 8px;
 }
 .provider-add-row input {
@@ -725,41 +724,97 @@ body {
     border-radius: 4px;
     font-size: 14px;
     outline: none;
-    min-width: 0;
 }
 .provider-add-row input:focus { border-color:#4a6cf7; }
-.provider-add-row button {
-    flex-shrink: 0;
-}
 .provider-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
 }
 .provider-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 12px;
+    gap: 8px;
+    padding: 8px 10px;
     background: #f5f7fa;
     border-radius: 4px;
     font-size: 14px;
 }
-.provider-item .provider-name {
-    color: #333;
+.provider-item-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.provider-item .provider-del-btn {
-    padding: 2px 10px;
+.provider-item button {
+    padding: 2px 8px;
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
-    background: transparent;
     color: #f56c6c;
+    background: #fef0f0;
 }
-.provider-item .provider-del-btn:hover { background: #fef0f0; }
+.provider-item button:hover { background:#fde2e2; }
+.provider-empty {
+    padding: 18px 0;
+    color: #999;
+    text-align: center;
+    font-size: 14px;
+}
 #providerStatus {
     min-height: 18px;
+    font-size: 13px;
+    color: #f56c6c;
+}
+.provider-search-box {
+    position: relative;
+    width: 100%;
+}
+.provider-search-dropdown {
+    display: none;
+    position: fixed;
+    min-width: 120px;
+    max-height: 220px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #dcdfe6;
+    border-radius: 4px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    z-index: 10001;
+    padding: 4px 0;
+    text-align: left;
+}
+.provider-search-dropdown.show {
+    display: block;
+}
+.provider-search-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #333;
+}
+.provider-search-option:hover {
+    background: #ecf5ff;
+    color: #4a6cf7;
+}
+.provider-search-option small {
+    color: #999;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+.provider-search-empty {
+    display: none;
+    padding: 10px;
+    color: #999;
+    text-align: center;
     font-size: 13px;
 }
 
