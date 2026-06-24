@@ -48,15 +48,30 @@ const upload = multer({
     storage,
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-        const types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        const types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/svg+xml'];
         if (types.includes(file.mimetype)) cb(null, true);
         else cb(new Error('只支持图片格式'));
     }
 });
 
-app.use('/api/upload', upload.single('image'), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: '请上传图片' });
-    res.json({ success: true, url: `/uploads/${req.file.filename}` });
+function requireUploadAuth(req, res, next) {
+    if (!req.session.userId) return res.status(401).json({ error: '请先登录' });
+    next();
+}
+
+app.post('/api/upload', requireUploadAuth, (req, res) => {
+    upload.single('image')(req, res, (err) => {
+        if (err) {
+            const message = err.code === 'LIMIT_FILE_SIZE' ? '图片不能超过 10MB' : err.message;
+            return res.status(400).json({ error: message });
+        }
+        if (!req.file) return res.status(400).json({ error: '请上传图片' });
+        res.json({ success: true, url: `/uploads/${req.file.filename}` });
+    });
+});
+
+app.use('/api/upload', (req, res) => {
+    res.status(405).json({ error: '上传接口只支持 POST 请求' });
 });
 
 initDatabase();
