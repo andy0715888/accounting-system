@@ -1,182 +1,222 @@
+cat > ~/accounting-system/update.sh <<'EOF'
 #!/bin/bash
 
 set -e
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
 
 REPO_URL="https://github.com/andy0715888/accounting-system.git"
 INSTALL_DIR="accounting-system"
 DB_FILE="data/accounting.db"
 UPLOADS_DIR="uploads"
 IMAGES_DIR="public/images"
+PORT="3000"
 BACKUP_DIR="backup_$(date +%Y%m%d_%H%M%S)"
 
-echo -e "${GREEN}=========================================="
+echo "=========================================="
 echo "  记账系统 - 一键更新"
-echo "==========================================${NC}"
+echo "=========================================="
 echo ""
 
-# 检查是否在项目目录
 if [ ! -f "package.json" ] || [ ! -d "server" ]; then
-    if [ -d "$INSTALL_DIR" ]; then
+    if [ -d "$HOME/$INSTALL_DIR" ]; then
+        cd "$HOME/$INSTALL_DIR"
+    elif [ -d "$INSTALL_DIR" ]; then
         cd "$INSTALL_DIR"
     else
-        echo -e "${RED}❌ 未找到项目目录，请先运行 install.sh 安装${NC}"
+        echo "❌ 未找到项目目录，请先进入 accounting-system 目录"
         exit 1
     fi
 fi
 
 PROJECT_DIR=$(pwd)
-echo -e "${BLUE}📂 项目目录: $PROJECT_DIR${NC}"
+echo "📂 项目目录: $PROJECT_DIR"
 
-# 1. 停止当前服务
-echo -e "${YELLOW}➜ 检查并停止当前服务...${NC}"
-if [ -f "server.pid" ]; then
-    PID=$(cat server.pid)
-    if ps -p "$PID" > /dev/null 2>&1; then
-        kill "$PID" 2>/dev/null || true
-        sleep 2
+stop_service() {
+    echo "➜ 检查并停止当前服务..."
+
+    if [ -f "server.pid" ]; then
+        PID=$(cat server.pid)
         if ps -p "$PID" > /dev/null 2>&1; then
-            kill -9 "$PID" 2>/dev/null || true
+            kill "$PID" 2>/dev/null || true
+            sleep 2
+
+            if ps -p "$PID" > /dev/null 2>&1; then
+                kill -9 "$PID" 2>/dev/null || true
+                sleep 1
+            fi
+
+            echo "✅ 已按 server.pid 停止服务: $PID"
+        else
+            echo "⚠️ server.pid 里的进程未运行: $PID"
+        fi
+
+        rm -f server.pid
+    else
+        echo "⚠️ 未找到 server.pid"
+    fi
+
+    NODE_PIDS=$(pgrep -f "node server/index.js" || true)
+    if [ -n "$NODE_PIDS" ]; then
+        echo "➜ 发现 node server/index.js 进程，正在停止..."
+        echo "$NODE_PIDS" | xargs -r kill 2>/dev/null || true
+        sleep 2
+
+        NODE_PIDS_LEFT=$(pgrep -f "node server/index.js" || true)
+        if [ -n "$NODE_PIDS_LEFT" ]; then
+            echo "$NODE_PIDS_LEFT" | xargs -r kill -9 2>/dev/null || true
             sleep 1
         fi
-        echo -e "${GREEN}✅ 服务已停止 (PID: $PID)${NC}"
-    else
-        echo -e "${YELLOW}⚠️  PID $PID 未运行${NC}"
+
+        echo "✅ Node 服务进程已清理"
     fi
-    rm -f server.pid
-else
-    # 尝试通过进程名查找并停止
-    NODE_PID=$(pgrep -f "node server/index.js" || true)
-    if [ -n "$NODE_PID" ]; then
-        kill "$NODE_PID" 2>/dev/null || true
-        sleep 2
-        echo -e "${GREEN}✅ 服务已停止 (PID: $NODE_PID)${NC}"
+
+    if command -v fuser >/dev/null 2>&1; then
+        PORT_PIDS=$(fuser "$PORT/tcp" 2>/dev/null || true)
+        if [ -n "$PORT_PIDS" ]; then
+            echo "➜ 发现端口 $PORT 被占用，正在释放..."
+            fuser -k "$PORT/tcp" 2>/dev/null || true
+            sleep 2
+            echo "✅ 端口 $PORT 已释放"
+        fi
+    elif command -v lsof >/dev/null 2>&1; then
+        PORT_PIDS=$(lsof -ti:"$PORT" 2>/dev/null || true)
+        if [ -n "$PORT_PIDS" ]; then
+            echo "➜ 发现端口 $PORT 被占用，正在释放..."
+            echo "$PORT_PIDS" | xargs -r kill -9 2>/dev/null || true
+            sleep 2
+            echo "✅ 端口 $PORT 已释放"
+        fi
     else
-        echo -e "${YELLOW}⚠️  未检测到运行中的服务${NC}"
+        echo "⚠️ 系统没有 fuser/lsof，无法自动检查端口占用"
     fi
-fi
+}
 
-# 2. 备份数据
-echo -e "${YELLOW}➜ 备份数据...${NC}"
-mkdir -p "$BACKUP_DIR"
+backup_data() {
+    echo "➜ 备份数据..."
+    mkdir -p "$BACKUP_DIR"
 
-if [ -f "$DB_FILE" ]; then
-    cp "$DB_FILE" "$BACKUP_DIR/"
-    echo -e "${GREEN}✅ 数据库已备份: $BACKUP_DIR/$(basename $DB_FILE)${NC}"
-else
-    echo -e "${YELLOW}⚠️  未找到数据库文件${NC}"
-fi
+    if [ -f "$DB_FILE" ]; then
+        cp "$DB_FILE" "$BACKUP_DIR/accounting.db"
+        echo "✅ 数据库已备份: $BACKUP_DIR/accounting.db"
+    else
+        echo "⚠️ 未找到数据库文件: $DB_FILE"
+    fi
 
-if [ -d "$UPLOADS_DIR" ]; then
-    cp -r "$UPLOADS_DIR" "$BACKUP_DIR/"
-    echo -e "${GREEN}✅ 上传文件已备份${NC}"
-fi
+    if [ -d "$UPLOADS_DIR" ]; then
+        cp -r "$UPLOADS_DIR" "$BACKUP_DIR/uploads"
+        echo "✅ 上传文件已备份"
+    fi
 
-if [ -d "$IMAGES_DIR" ]; then
-    cp -r "$IMAGES_DIR" "$BACKUP_DIR/"
-    echo -e "${GREEN}✅ 图片文件已备份${NC}"
-fi
+    if [ -d "$IMAGES_DIR" ]; then
+        mkdir -p "$BACKUP_DIR/public"
+        cp -r "$IMAGES_DIR" "$BACKUP_DIR/public/images"
+        echo "✅ 图片文件已备份"
+    fi
+}
 
-# 3. 拉取最新代码
-echo -e "${YELLOW}➜ 拉取最新代码...${NC}"
+update_code() {
+    echo "➜ 拉取最新代码..."
 
-if [ -d ".git" ]; then
-    # 使用 git 更新
-    git fetch origin
-    git reset --hard origin/main
-    echo -e "${GREEN}✅ 代码已更新 (git)${NC}"
-elif command -v git &> /dev/null; then
-    # 没有 .git 但有 git，重新克隆
-    cd ..
-    mv "$INSTALL_DIR" "${INSTALL_DIR}_old"
-    git clone "$REPO_URL" "$INSTALL_DIR"
-    cd "$INSTALL_DIR"
-    echo -e "${GREEN}✅ 代码已重新克隆${NC}"
-else
-    # 使用 curl 下载最新代码
-    cd ..
-    mv "$INSTALL_DIR" "${INSTALL_DIR}_old"
-    TAR_URL="https://github.com/andy0715888/accounting-system/archive/main.tar.gz"
-    curl -L -o temp.tar.gz "$TAR_URL"
-    tar -xzf temp.tar.gz
-    mv accounting-system-main "$INSTALL_DIR"
-    rm temp.tar.gz
-    cd "$INSTALL_DIR"
-    echo -e "${GREEN}✅ 代码已下载更新${NC}"
-fi
+    if [ -d ".git" ]; then
+        git fetch origin
+        git reset --hard origin/main
+        echo "✅ 代码已更新"
+    else
+        echo "❌ 当前目录不是 git 项目，无法直接 git 更新"
+        echo "请确认你当前目录是 /root/accounting-system"
+        exit 1
+    fi
+}
 
-# 4. 恢复数据
-echo -e "${YELLOW}➜ 恢复数据...${NC}"
+restore_data() {
+    echo "➜ 恢复数据..."
 
-if [ -f "$BACKUP_DIR/$(basename $DB_FILE)" ]; then
-    mkdir -p "$(dirname $DB_FILE)"
-    cp "$BACKUP_DIR/$(basename $DB_FILE)" "$DB_FILE"
-    echo -e "${GREEN}✅ 数据库已恢复${NC}"
-fi
+    if [ -f "$BACKUP_DIR/accounting.db" ]; then
+        mkdir -p "data"
+        cp "$BACKUP_DIR/accounting.db" "$DB_FILE"
+        echo "✅ 数据库已恢复"
+    fi
 
-if [ -d "$BACKUP_DIR/$UPLOADS_DIR" ]; then
-    cp -r "$BACKUP_DIR/$UPLOADS_DIR" .
-    echo -e "${GREEN}✅ 上传文件已恢复${NC}"
-fi
+    if [ -d "$BACKUP_DIR/uploads" ]; then
+        rm -rf "$UPLOADS_DIR"
+        cp -r "$BACKUP_DIR/uploads" "$UPLOADS_DIR"
+        echo "✅ 上传文件已恢复"
+    fi
 
-if [ -d "$BACKUP_DIR/$(basename $IMAGES_DIR)" ]; then
-    mkdir -p "$(dirname $IMAGES_DIR)"
-    cp -r "$BACKUP_DIR/$(basename $IMAGES_DIR)" "$(dirname $IMAGES_DIR)/"
-    echo -e "${GREEN}✅ 图片文件已恢复${NC}"
-fi
+    if [ -d "$BACKUP_DIR/public/images" ]; then
+        mkdir -p "public"
+        rm -rf "$IMAGES_DIR"
+        cp -r "$BACKUP_DIR/public/images" "$IMAGES_DIR"
+        echo "✅ 图片文件已恢复"
+    fi
+}
 
-# 5. 安装依赖
-echo -e "${YELLOW}➜ 安装/更新依赖...${NC}"
-npm install --registry=https://registry.npmmirror.com
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ 依赖安装失败${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✅ 依赖安装完成${NC}"
+install_deps() {
+    echo "➜ 安装/更新依赖..."
+    npm install --registry=https://registry.npmmirror.com
+    echo "✅ 依赖安装完成"
+}
 
-# 6. 清理旧目录
-if [ -d "${PROJECT_DIR}_old" ] || [ -d "../${INSTALL_DIR}_old" ]; then
-    rm -rf "${PROJECT_DIR}_old" "../${INSTALL_DIR}_old" 2>/dev/null || true
-    echo -e "${GREEN}✅ 旧目录已清理${NC}"
-fi
+start_service() {
+    echo "➜ 启动服务..."
 
-# 7. 启动服务
-echo -e "${YELLOW}➜ 启动服务...${NC}"
-nohup npm start > server.log 2>&1 &
-SERVER_PID=$!
-echo $SERVER_PID > server.pid
-sleep 2
+    if command -v fuser >/dev/null 2>&1; then
+        PORT_PIDS=$(fuser "$PORT/tcp" 2>/dev/null || true)
+        if [ -n "$PORT_PIDS" ]; then
+            echo "⚠️ 启动前发现端口 $PORT 仍被占用，再次释放..."
+            fuser -k "$PORT/tcp" 2>/dev/null || true
+            sleep 2
+        fi
+    elif command -v lsof >/dev/null 2>&1; then
+        PORT_PIDS=$(lsof -ti:"$PORT" 2>/dev/null || true)
+        if [ -n "$PORT_PIDS" ]; then
+            echo "⚠️ 启动前发现端口 $PORT 仍被占用，再次释放..."
+            echo "$PORT_PIDS" | xargs -r kill -9 2>/dev/null || true
+            sleep 2
+        fi
+    fi
 
-if ps -p $SERVER_PID > /dev/null; then
-    echo -e "${GREEN}✅ 服务已启动 (PID: $SERVER_PID)${NC}"
-else
-    echo -e "${RED}❌ 服务启动失败，请查看 server.log${NC}"
-    exit 1
-fi
+    nohup npm start > server.log 2>&1 &
+    SERVER_PID=$!
+    echo "$SERVER_PID" > server.pid
 
-IP_ADDR=$(hostname -I | awk '{print $1}')
+    sleep 3
+
+    if ps -p "$SERVER_PID" > /dev/null 2>&1; then
+        echo "✅ 服务已启动，PID: $SERVER_PID"
+    else
+        echo "❌ 服务启动失败，请查看日志："
+        echo "------------------------------------------"
+        tail -n 80 server.log || true
+        echo "------------------------------------------"
+        exit 1
+    fi
+}
+
+stop_service
+backup_data
+update_code
+restore_data
+install_deps
+start_service
+
+IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}')
 [ -z "$IP_ADDR" ] && IP_ADDR="localhost"
 
 echo ""
-echo -e "${GREEN}=========================================="
+echo "=========================================="
 echo "  🎉 更新完成！"
-echo "==========================================${NC}"
+echo "=========================================="
 echo ""
-echo -e "🌐 访问地址: http://${IP_ADDR}:3000"
-echo -e "📂 项目目录: $(pwd)"
-echo -e "📄 服务日志: $(pwd)/server.log"
-echo -e "💾 数据备份: $(pwd)/$BACKUP_DIR"
+echo "🌐 访问地址: http://${IP_ADDR}:${PORT}"
+echo "📂 项目目录: $(pwd)"
+echo "📄 服务日志: $(pwd)/server.log"
+echo "💾 数据备份: $(pwd)/$BACKUP_DIR"
 echo ""
-echo -e "${YELLOW}⚠️  更新前数据已自动备份，如有问题可手动恢复${NC}"
+echo "常用命令："
+echo "  查看日志: tail -f server.log"
+echo "  停止服务: kill \$(cat server.pid)"
+echo "  查看端口: ss -ltnp | grep :${PORT}"
 echo ""
-echo -e "🔧 常用命令："
-echo "   停止服务: kill \$(cat server.pid)"
-echo "   查看日志: tail -f server.log"
-echo "   手动恢复: cp $BACKUP_DIR/accounting.db data/"
-echo ""
-echo -e "${GREEN}==========================================${NC}"
+EOF
+
+chmod +x ~/accounting-system/update.sh
