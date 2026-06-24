@@ -10,6 +10,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const registerForm = document.getElementById('registerForm');
     const bgLayer = document.getElementById('bgLayer');
     const errorMsg = document.getElementById('errorMsg');
+    const loginBody = document.querySelector('.login-body');
+    const loginInputGroups = [usernameInput.closest('.input-group'), passwordInput.closest('.input-group')];
+    const loginFooter = document.getElementById('showRegister').closest('.login-footer');
+    const subtitle = document.querySelector('.subtitle');
 
     function cssUrl(url) {
         return String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -60,6 +64,19 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => errorMsg.classList.remove('show'), 3000);
     }
 
+    function setMode(mode) {
+        const isRegister = mode === 'register';
+        loginBody.classList.toggle('register-mode', isRegister);
+        loginInputGroups.forEach(group => { if (group) group.style.display = isRegister ? 'none' : 'block'; });
+        loginBtn.style.display = isRegister ? 'none' : 'block';
+        loginFooter.style.display = isRegister ? 'none' : 'block';
+        registerForm.style.display = isRegister ? 'block' : 'none';
+        subtitle.textContent = isRegister ? '创建新账号' : '个人财务管理助手';
+        errorMsg.classList.remove('show');
+        if (isRegister) setTimeout(() => regUsernameInput.focus(), 0);
+        else setTimeout(() => usernameInput.focus(), 0);
+    }
+
     function handleLogin() {
         const username = usernameInput.value.trim();
         const password = passwordInput.value.trim();
@@ -108,12 +125,11 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(data => {
             if (data.success) {
                 showError('✅ 注册成功，请登录');
-                registerForm.style.display = 'none';
-                document.querySelector('.login-footer:not(.register-form)').style.display = 'block';
                 usernameInput.value = username;
                 passwordInput.value = '';
                 registerBtn.disabled = false;
                 registerBtn.textContent = '注 册';
+                setMode('login');
             } else {
                 showError(data.error || '注册失败');
                 registerBtn.disabled = false;
@@ -136,15 +152,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     showRegister.addEventListener('click', (e) => {
         e.preventDefault();
-        registerForm.style.display = 'block';
-        document.querySelector('.login-footer:not(.register-form)').style.display = 'none';
-        errorMsg.classList.remove('show');
+        setMode('register');
     });
 
     showLogin.addEventListener('click', (e) => {
         e.preventDefault();
-        registerForm.style.display = 'none';
-        document.querySelector('.login-footer:not(.register-form)').style.display = 'block';
-        errorMsg.classList.remove('show');
+        setMode('login');
     });
 });
