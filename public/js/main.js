@@ -2014,12 +2014,14 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('image', file);
         try {
             const res = await fetch('/api/upload', { method: 'POST', credentials: 'include', body: formData });
-            const data = await res.json();
+            const data = await res.json().catch(() => ({ error: '服务器返回格式错误，请确认上传接口正常' }));
+            if (!res.ok || data.error) throw new Error(data.error || '上传失败');
             if (data.success) {
                 const response = await fetch('/api/settings/favicon', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ path: data.url })
                 });
-                const result = await response.json();
+                const result = await response.json().catch(() => ({ error: '服务器返回格式错误，请确认图标保存接口正常' }));
+                if (!response.ok || result.error) throw new Error(result.error || '保存图标失败');
                 if (result.success) {
                     document.getElementById('faviconStatus').textContent = '✅ 图标已更新，请刷新浏览器查看';
                     const link = document.querySelector("link[rel*='icon']");
@@ -2103,6 +2105,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('setBgUrl').addEventListener('click', async function() {
         const url = document.getElementById('bgUrlInput').value.trim();
         if (!url) { setStatus('⚠️ 请输入URL'); return; }
+        if (!/^https?:\/\//i.test(url)) { setStatus('⚠️ 图片地址必须以 http:// 或 https:// 开头'); return; }
         try {
             await API.post('/settings', { key: 'background', value: { type: 'url', url } });
             const preview = document.getElementById('bgPreview');
@@ -2119,7 +2122,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const formData = new FormData();
             formData.append('image', file);
             const res = await fetch('/api/upload', { method: 'POST', credentials: 'include', body: formData });
-            const data = await res.json();
+            const data = await res.json().catch(() => ({ error: '服务器返回格式错误，请确认上传接口正常' }));
+            if (!res.ok || data.error) throw new Error(data.error || '上传失败');
             if (data.success) {
                 await API.post('/settings', { key: 'background', value: { type: 'local', path: data.url } });
                 const preview = document.getElementById('bgPreview');
