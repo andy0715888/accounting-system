@@ -170,6 +170,8 @@ document.addEventListener('DOMContentLoaded', function() {
             let dateKey = colKey === 'host_remaining' ? 'host_expire' : (colKey === 'client_remaining' ? 'client_expire' : '');
             const days = computeDaysRemaining(record.data[dateKey]);
             return days !== '' ? days + ' 天' : '';
+        } else if (colKey === 'ip_info') {
+            return record.data.ip_address || '';
         } else if (colKey === 'is_expired') {
             return checkExpired(record.data.host_expire);
         } else if (colKey === 'fee') {
@@ -369,7 +371,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     async function loadDataForTab(tabId, force = false) {
         try {
-            if (!force && state.tabCache[tabId]) {
+            if (!force && state.tabCache[tabId] && state.tabCache[tabId].columns && state.tabCache[tabId].records) {
                 state.columns = state.tabCache[tabId].columns;
                 state.records = state.tabCache[tabId].records;
                 updateAllFilterOptions();
@@ -599,6 +601,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     const displayVal = days !== '' ? days + ' 天' : '';
                     const color = days < 0 ? '#f56c6c' : (days <= 7 ? '#e6a23c' : '#333');
                     inputHtml = `<span style="color:${color};">${escapeHtml(displayVal)}</span>`;
+                } else if (colKey === 'ip_info') {
+                    inputHtml = `<span>${escapeHtml(record.data.ip_address || '')}</span>`;
                 } else if (col.col_type === 'address_select') {
                     const optionsArr = col.col_options || [];
                     const options = optionsArr.map(opt => {
@@ -767,10 +771,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const th = document.querySelector(`th[data-col="${colKey}"]`);
         if (!th) return;
         const rect = th.getBoundingClientRect();
-        const panelWidth = Math.max(rect.width, 140);
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1200;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 800;
+        const panelWidth = Math.min(Math.max(rect.width, 180), Math.max(180, viewportWidth - 16));
+        const maxLeft = Math.max(8, viewportWidth - panelWidth - 8);
+        const left = Math.min(Math.max(8, rect.left), maxLeft);
+        const top = Math.min(rect.bottom + 2, Math.max(8, viewportHeight - 300));
         panel.style.position = 'fixed';
-        panel.style.left = rect.left + 'px';
-        panel.style.top = (rect.bottom + 2) + 'px';
+        panel.style.left = left + 'px';
+        panel.style.top = top + 'px';
         panel.style.width = panelWidth + 'px';
         panel.style.maxHeight = '280px';
         panel.style.overflowY = 'auto';
@@ -1643,63 +1652,224 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // --- 统计 ---
-    function renderStats() {
-        if (!state.currentTabId) return;
-        const records = state.records;
-        if (records.length === 0) {
-            statsContainer.innerHTML = '<p style="color:#999;text-align:center;padding:40px 0;">暂无数据</p>';
-            return;
+    async function getAllTabRecordsForStats() {
+        const all = [];
+        for (const tab of state.tabs) {
+            let records;
+            if (tab.id === state.currentTabId) {
+                records = state.records;
+            } else if (state.tabCache[tab.id] && state.tabCache[tab.id].records) {
+                records = state.tabCache[tab.id].records;
+            } else {
+                records = await API.get('/records?tabId=' + tab.id);
+                state.tabCache[tab.id] = state.tabCache[tab.id] || {};
+                state.tabCache[tab.id].records = records;
+            }
+            records.forEach(record => all.push({ ...record, tabId: tab.id, tabName: tab.name }));
         }
+        return all;
+    }
 
-        let totalExpense = 0, totalIncome = 0;
-        records.forEach(r => {
-            const months = parseInt(r.data.months) || 0;
-            totalExpense += computeExpenseValue(r.data.expense, months);
-            const feeNum = computeFeeValue(r.data.fee || '');
-            totalIncome += (typeof feeNum === 'number' ? feeNum : (parseFloat(feeNum) || 0));
-        });
-        const net = totalIncome - totalExpense;
+    function getStatsDate(record) {
+        const dateVal = record.data.host_purchase || record.data.client_purchase || record.created_at || '';
+        const d = new Date(dateVal);
+        return isNaN(d) ? null : d;
+    }
 
-        const groups = {};
-        records.forEach(record => {
-            const dateVal = record.data.host_purchase || record.data.client_purchase || '';
-            if (!dateVal) return;
-            const d = new Date(dateVal);
-            if (isNaN(d)) return;
-            const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-            if (!groups[key]) groups[key] = [];
-            groups[key].push(record);
-        });
+    function getRecordFinancials(record) {
+        const months = parseInt(record.data.months) || 0;
+        const expense = computeExpenseValue(record.data.expense, months) || 0;
+        const feeNum = computeFeeValue(record.data.fee || '');
+        const income = typeof feeNum === 'number' ? feeNum : (parseFloat(feeNum) || 0);
+        return { income, expense, net: income - expense };
+    }
 
-        const dailyStats = [];
-        Object.keys(groups).sort().forEach(dateKey => {
-            const dayRecords = groups[dateKey];
-            let dayExpense = 0, dayIncome = 0;
-            dayRecords.forEach(r => {
-                const months = parseInt(r.data.months) || 0;
-                dayExpense += computeExpenseValue(r.data.expense, months);
-                const feeNum = computeFeeValue(r.data.fee || '');
-                dayIncome += (typeof feeNum === 'number' ? feeNum : (parseFloat(feeNum) || 0));
+    function sumStats(records) {
+        return records.reduce((acc, record) => {
+            const f = getRecordFinancials(record);
+            acc.income += f.income;
+            acc.expense += f.expense;
+            acc.net += f.net;
+            acc.count += 1;
+            return acc;
+        }, { income: 0, expense: 0, net: 0, count: 0 });
+    }
+
+    function formatMoney(value) {
+        return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function renderMiniBars(items, maxValue, valueKey, colorClass) {
+        if (items.length === 0) return '<div class="stats-empty">暂无数据</div>';
+        return items.map(item => {
+            const value = Math.abs(item[valueKey] || 0);
+            const width = maxValue > 0 ? Math.max(4, Math.round(value / maxValue * 100)) : 4;
+            return `
+                <div class="stats-bar-row">
+                    <div class="stats-bar-label">${escapeHtml(item.label)}</div>
+                    <div class="stats-bar-track"><div class="stats-bar ${colorClass}" style="width:${width}%;"></div></div>
+                    <div class="stats-bar-value">${formatMoney(item[valueKey])}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async function renderStats() {
+        try {
+            statsContainer.innerHTML = '<div class="stats-loading">正在汇总所有标签数据...</div>';
+            const records = await getAllTabRecordsForStats();
+            if (records.length === 0) {
+                statsContainer.innerHTML = '<div class="stats-empty large">暂无可统计数据</div>';
+                return;
+            }
+
+            const total = sumStats(records);
+            const profitRate = total.income > 0 ? (total.net / total.income * 100) : 0;
+            const avgIncome = total.count ? total.income / total.count : 0;
+            const avgExpense = total.count ? total.expense / total.count : 0;
+            const expiredCount = records.filter(r => checkExpired(r.data.host_expire) === '过期').length;
+            const activeCount = records.filter(r => checkExpired(r.data.host_expire) === '有效').length;
+
+            const monthMap = {};
+            const yearMap = {};
+            const tabMap = {};
+            const providerMap = {};
+
+            records.forEach(record => {
+                const f = getRecordFinancials(record);
+                const d = getStatsDate(record);
+                if (d) {
+                    const year = String(d.getFullYear());
+                    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                    monthMap[month] = monthMap[month] || { label: month, income: 0, expense: 0, net: 0, count: 0 };
+                    yearMap[year] = yearMap[year] || { label: year, income: 0, expense: 0, net: 0, count: 0 };
+                    [monthMap[month], yearMap[year]].forEach(item => {
+                        item.income += f.income;
+                        item.expense += f.expense;
+                        item.net += f.net;
+                        item.count += 1;
+                    });
+                }
+                const tabName = record.tabName || '未命名标签';
+                tabMap[tabName] = tabMap[tabName] || { label: tabName, income: 0, expense: 0, net: 0, count: 0 };
+                tabMap[tabName].income += f.income;
+                tabMap[tabName].expense += f.expense;
+                tabMap[tabName].net += f.net;
+                tabMap[tabName].count += 1;
+
+                const provider = record.data.provider || '未填写服务商';
+                providerMap[provider] = providerMap[provider] || { label: provider, income: 0, expense: 0, net: 0, count: 0 };
+                providerMap[provider].income += f.income;
+                providerMap[provider].expense += f.expense;
+                providerMap[provider].net += f.net;
+                providerMap[provider].count += 1;
             });
-            dailyStats.push({ date: dateKey, income: dayIncome, expense: dayExpense, net: dayIncome - dayExpense });
-        });
 
-        let html = `
-            <div class="stats-grid">
-                <div class="stat-card"><div class="stat-label">总支出</div><div class="stat-value negative">${totalExpense.toFixed(2)}</div></div>
-                <div class="stat-card"><div class="stat-label">总收入</div><div class="stat-value positive">${totalIncome.toFixed(2)}</div></div>
-                <div class="stat-card"><div class="stat-label">净收入</div><div class="stat-value ${net >= 0 ? 'positive' : 'negative'}">${net.toFixed(2)}</div></div>
-                <div class="stat-card"><div class="stat-label">记录总数</div><div class="stat-value neutral">${records.length}</div></div>
-            </div>
-            <div class="stats-detail">
-                <h3>每日明细</h3>
-                <table><thead><tr><th>日期</th><th>收入</th><th>支出</th><th>净额</th></tr></thead><tbody>
-        `;
-        dailyStats.forEach(day => {
-            html += `<tr><td>${day.date}</td><td style="color:#67c23a;">${day.income.toFixed(2)}</td><td style="color:#f56c6c;">${day.expense.toFixed(2)}</td><td style="color:${day.net >= 0 ? '#67c23a' : '#f56c6c'};">${day.net.toFixed(2)}</td></tr>`;
-        });
-        html += '</tbody></table></div>';
-        statsContainer.innerHTML = html;
+            const months = Object.values(monthMap).sort((a, b) => a.label.localeCompare(b.label));
+            const recentMonths = months.slice(-12);
+            const years = Object.values(yearMap).sort((a, b) => a.label.localeCompare(b.label));
+            const tabs = Object.values(tabMap).sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+            const providers = Object.values(providerMap).sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).slice(0, 8);
+            const maxMonthAmount = Math.max(1, ...recentMonths.map(m => Math.max(Math.abs(m.income), Math.abs(m.expense), Math.abs(m.net))));
+            const maxTabNet = Math.max(1, ...tabs.map(t => Math.abs(t.net)));
+            const maxProviderNet = Math.max(1, ...providers.map(p => Math.abs(p.net)));
+
+            const bestMonth = months.length ? months.reduce((best, item) => item.net > best.net ? item : best, months[0]) : null;
+            const worstMonth = months.length ? months.reduce((worst, item) => item.net < worst.net ? item : worst, months[0]) : null;
+
+            const monthRows = recentMonths.map(item => `
+                <tr>
+                    <td>${escapeHtml(item.label)}</td>
+                    <td class="positive">${formatMoney(item.income)}</td>
+                    <td class="negative">${formatMoney(item.expense)}</td>
+                    <td class="${item.net >= 0 ? 'positive' : 'negative'}">${formatMoney(item.net)}</td>
+                    <td>${item.count}</td>
+                </tr>
+            `).join('');
+
+            const yearRows = years.map(item => `
+                <tr>
+                    <td>${escapeHtml(item.label)}</td>
+                    <td class="positive">${formatMoney(item.income)}</td>
+                    <td class="negative">${formatMoney(item.expense)}</td>
+                    <td class="${item.net >= 0 ? 'positive' : 'negative'}">${formatMoney(item.net)}</td>
+                    <td>${item.count}</td>
+                </tr>
+            `).join('');
+
+            statsContainer.innerHTML = `
+                <div class="stats-hero">
+                    <div>
+                        <div class="stats-eyebrow">All Tabs Financial Intelligence</div>
+                        <h2>全标签财务统计</h2>
+                        <p>已合并 ${state.tabs.length} 个标签，共 ${records.length} 条记录。</p>
+                    </div>
+                    <div class="stats-hero-net ${total.net >= 0 ? 'positive' : 'negative'}">
+                        <span>净收入</span>
+                        <strong>${formatMoney(total.net)}</strong>
+                    </div>
+                </div>
+
+                <div class="stats-grid premium">
+                    <div class="stat-card dark"><div class="stat-label">总收入</div><div class="stat-value positive">${formatMoney(total.income)}</div><div class="stat-sub">平均每条 ${formatMoney(avgIncome)}</div></div>
+                    <div class="stat-card dark"><div class="stat-label">总支出</div><div class="stat-value negative">${formatMoney(total.expense)}</div><div class="stat-sub">平均每条 ${formatMoney(avgExpense)}</div></div>
+                    <div class="stat-card dark"><div class="stat-label">利润率</div><div class="stat-value neutral">${profitRate.toFixed(1)}%</div><div class="stat-sub">收入转化净额占比</div></div>
+                    <div class="stat-card dark"><div class="stat-label">到期状态</div><div class="stat-value neutral">${activeCount}/${expiredCount}</div><div class="stat-sub">有效 / 过期</div></div>
+                </div>
+
+                <div class="stats-insight-grid">
+                    <div class="stats-panel">
+                        <h3>近 12 个月趋势</h3>
+                        <div class="stats-month-bars">
+                            ${recentMonths.map(item => `
+                                <div class="month-bar-card">
+                                    <div class="month-bar-title">${escapeHtml(item.label)}</div>
+                                    <div class="month-bar-stack">
+                                        <div class="month-bar income" style="height:${Math.max(6, Math.abs(item.income) / maxMonthAmount * 100)}%;"></div>
+                                        <div class="month-bar expense" style="height:${Math.max(6, Math.abs(item.expense) / maxMonthAmount * 100)}%;"></div>
+                                        <div class="month-bar net ${item.net >= 0 ? 'positive' : 'negative'}" style="height:${Math.max(6, Math.abs(item.net) / maxMonthAmount * 100)}%;"></div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="stats-legend"><span class="income"></span>收入 <span class="expense"></span>支出 <span class="net"></span>净额</div>
+                    </div>
+
+                    <div class="stats-panel">
+                        <h3>关键洞察</h3>
+                        <div class="insight-list">
+                            <div><span>最佳月份</span><strong>${bestMonth ? `${escapeHtml(bestMonth.label)} / ${formatMoney(bestMonth.net)}` : '暂无'}</strong></div>
+                            <div><span>压力月份</span><strong>${worstMonth ? `${escapeHtml(worstMonth.label)} / ${formatMoney(worstMonth.net)}` : '暂无'}</strong></div>
+                            <div><span>标签数量</span><strong>${state.tabs.length}</strong></div>
+                            <div><span>服务商数量</span><strong>${Object.keys(providerMap).length}</strong></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-insight-grid">
+                    <div class="stats-panel">
+                        <h3>标签净额排行</h3>
+                        ${renderMiniBars(tabs, maxTabNet, 'net', 'net')}
+                    </div>
+                    <div class="stats-panel">
+                        <h3>服务商贡献排行</h3>
+                        ${renderMiniBars(providers, maxProviderNet, 'net', 'net')}
+                    </div>
+                </div>
+
+                <div class="stats-detail premium-table">
+                    <h3>年度对比</h3>
+                    <table><thead><tr><th>年份</th><th>收入</th><th>支出</th><th>净额</th><th>记录数</th></tr></thead><tbody>${yearRows}</tbody></table>
+                </div>
+
+                <div class="stats-detail premium-table">
+                    <h3>月份明细</h3>
+                    <table><thead><tr><th>月份</th><th>收入</th><th>支出</th><th>净额</th><th>记录数</th></tr></thead><tbody>${monthRows}</tbody></table>
+                </div>
+            `;
+        } catch (err) {
+            statsContainer.innerHTML = `<div class="stats-empty large">统计加载失败：${escapeHtml(err.message)}</div>`;
+        }
     }
 
     // --- 密码修改 ---
