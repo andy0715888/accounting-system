@@ -585,7 +585,7 @@ body {
 
 /* 统计页面 */
 #view-stats {
-    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 42%, #f8fafc 42%, #f8fafc 100%);
+    background: #0f172a;
     border-radius: 14px;
     padding: 18px;
     overflow: hidden;
